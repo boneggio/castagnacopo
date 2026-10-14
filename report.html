@@ -105,6 +105,22 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
 .dy .c{flex:1;height:100%;display:flex;align-items:flex-end;min-width:0;cursor:default}
 .dy .b{width:100%;background:var(--brand);border-radius:4px 4px 0 0;min-height:0}
 .dx{display:flex;justify-content:space-between;padding-left:44px;font-size:.72rem;color:var(--muted);margin-top:4px}
+.chk{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:4px 0 20px}
+@media (max-width:820px){.chk{grid-template-columns:1fr 1fr}}
+.chk div{background:var(--bg);border-radius:12px;padding:10px 12px;min-width:0}
+.chk small{display:block;color:var(--muted);font-size:.75rem}
+.chk b{display:block;font-size:1.25rem;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chk span{display:block;color:var(--muted);font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cu{position:relative;height:170px;padding-left:44px}
+.cu svg{position:absolute;left:44px;top:0;width:calc(100% - 44px);height:100%;overflow:visible}
+.cu .gl{position:absolute;left:44px;right:0;border-top:1px solid var(--line);font-size:.72rem;color:var(--muted)}
+.cu .gl span{position:absolute;right:calc(100% + 6px);top:-.7em;white-space:nowrap;font-variant-numeric:tabular-nums}
+.cu .lim{position:absolute;left:44px;right:0;border-top:1.5px dashed var(--err)}
+.cu .lim span{position:absolute;right:0;top:-1.5em;font-size:.72rem;color:var(--err);font-weight:600;background:var(--card);padding:0 4px}
+.cu .cols{position:absolute;left:44px;right:0;top:0;bottom:0;display:flex}
+.cu .c{flex:1;position:relative;cursor:default}
+.cu .c:hover::after{content:'';position:absolute;left:50%;top:0;bottom:0;border-left:1px solid var(--muted)}
+.rk .v small{opacity:.8}
 .chtip{position:fixed;z-index:20;pointer-events:none;background:var(--ink);color:var(--bg);font-size:.8rem;line-height:1.35;padding:7px 10px;border-radius:8px;max-width:240px;opacity:0;transition:opacity .1s}
 .chtip.on{opacity:1}
 .chempty{color:var(--muted);font-size:.85rem;padding:24px 0}
@@ -231,6 +247,8 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
       <div class="bar"><h2 style="margin:0">Andamento vendite</h2>
         <div class="seg noprint" role="group" aria-label="Misura dei grafici"><button type="button" data-m="kg" class="on">Kg</button><button type="button" data-m="euro">Euro</button></div>
       </div>
+      <div class="chk" id="chKpi"></div>
+      <div class="ch" style="margin-bottom:22px"><h3>Totale progressivo</h3><p class="sub" id="chCumSub"></p><div id="chCum"></div></div>
       <div class="grid2" style="margin:0">
         <div class="ch"><h3>Chi vende di più</h3><p class="sub" id="chRankSub"></p><div id="chRank"></div></div>
         <div class="ch"><h3>Vendite per giorno</h3><p class="sub" id="chDaySub"></p><div id="chDay"></div></div>
@@ -666,7 +684,7 @@ function renderCharts(){
   $('chRankSub').textContent = rk.length ? (chM === 'kg' ? 'Kg ordinati' : 'Euro ordinati') + ' per referente o contatto' : '';
   $('chRank').innerHTML = rk.length ? '<div class="rk">' + rk.map(x => {
     const tip = `<b>${esc(x.nome)}</b><br>${x.n} ${x.n === 1 ? 'ordine' : 'ordini'} · ${kgTxt(x.kg)} · ${eur(x.euro)}` + (tot ? `<br>${Math.round(x[chM] / tot * 100)}% del totale` : '');
-    return `<div class="nm" title="${esc(x.nome)}">${esc(x.nome)}</div><div class="tr" data-tip="${esc(tip)}"><div class="b" style="width:${max1 ? x[chM] / max1 * 85 : 0}%"></div><span class="v">${mTxt(x[chM])}</span></div>`;
+    return `<div class="nm" title="${esc(x.nome)}">${esc(x.nome)}</div><div class="tr" data-tip="${esc(tip)}"><div class="b" style="width:${max1 ? x[chM] / max1 * 85 : 0}%"></div><span class="v">${mTxt(x[chM])} <small>· ${tot ? Math.round(x[chM] / tot * 100) : 0}%</small></span></div>`;
   }).join('') + '</div>' : '<div class="chempty">Ancora nessun ordine.</div>';
   tipBind($('chRank'));
   // vendite per giorno
@@ -674,7 +692,7 @@ function renderCharts(){
   O.forEach(o => { const d = String(o.data || '').slice(0, 10); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
     const x = byDay[d] || (byDay[d] = {kg:0, euro:0, n:0}); x.kg += +o.kg || 0; x.euro += +o.euro || 0; x.n++; });
   const ds = Object.keys(byDay).sort();
-  if (!ds.length) { $('chDaySub').textContent = ''; $('chDay').innerHTML = '<div class="chempty">Ancora nessun ordine.</div>'; return; }
+  if (!ds.length) { $('chDaySub').textContent = ''; $('chDay').innerHTML = '<div class="chempty">Ancora nessun ordine.</div>'; $('chKpi').innerHTML = ''; $('chCumSub').textContent = ''; $('chCum').innerHTML = '<div class="chempty">Ancora nessun ordine.</div>'; return; }
   const days = []; for (let t = Date.parse(ds[0] + 'T12:00:00Z'), end = Date.parse(ds.at(-1) + 'T12:00:00Z'); t <= end; t += 864e5) days.push(new Date(t).toISOString().slice(0, 10));
   const vals = days.map(d => ({d, ...(byDay[d] || {kg:0, euro:0, n:0})}));
   const best = vals.reduce((a, b) => b[chM] > a[chM] ? b : a);
@@ -686,6 +704,26 @@ function renderCharts(){
   const mid = days.length > 2 ? dLbl(days[Math.floor((days.length - 1) / 2)]) : '';
   $('chDay').innerHTML = `<div class="dy">${gl}<div class="cols">${cols}</div></div><div class="dx"><span>${dLbl(days[0])}</span>${mid ? `<span>${mid}</span>` : ''}${days.length > 1 ? `<span>${dLbl(days.at(-1))}</span>` : ''}</div>`;
   tipBind($('chDay'));
+  // riquadri di sintesi
+  const tot2 = vals.reduce((t, v) => t + v[chM], 0), nOrd = O.length, top1 = rk[0];
+  const kp = [['Totale', mTxt(tot2), nOrd + (nOrd === 1 ? ' ordine' : ' ordini')],
+    ['Media al giorno', mTxt(Math.round(tot2 / vals.length * 10) / 10), 'su ' + vals.length + (vals.length === 1 ? ' giorno' : ' giorni')],
+    ['Giorno migliore', mTxt(best[chM]), dLbl(best.d, true)],
+    ['Chi vende di più', top1 ? esc(top1.nome) : '—', top1 ? mTxt(top1[chM]) : '']];
+  $('chKpi').innerHTML = kp.map(k => `<div><small>${k[0]}</small><b>${k[1]}</b><span>${k[2]}</span></div>`).join('');
+  // totale progressivo
+  let run = 0; const cum = vals.map(v => ({d:v.d, y:(run += v[chM]), day:v}));
+  const lim = chM === 'kg' && (D.settings || {}).limit > 0 ? D.settings.limit : 0;
+  const rawC = Math.max(run, lim), stC = Math.pow(10, Math.floor(Math.log10(rawC || 1))), topC = Math.ceil((rawC || 1) / stC * 2) / 2 * stC;
+  const n = cum.length, X = i => n === 1 ? 50 : i / (n - 1) * 100, Y = y => 100 - y / topC * 100;
+  const line = cum.map((p, i) => `${X(i)},${Y(p.y)}`).join(' ');
+  const svg = `<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon points="${X(0)},100 ${line} ${X(n - 1)},100" fill="var(--brand)" fill-opacity=".12"/><polyline points="${line}" fill="none" stroke="var(--brand)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>`;
+  const glC = [1, .5, 0].map(f => `<div class="gl" style="top:${(1 - f) * 100}%"><span>${chM === 'kg' ? (topC * f).toLocaleString('it-IT') : eur(topC * f).replace(',00', '')}</span></div>`).join('');
+  const limEl = lim ? `<div class="lim" style="top:${Y(lim)}%"><span>disponibili ${kgTxt(lim)}</span></div>` : '';
+  const hit = cum.map(p => `<div class="c" data-tip="${esc(`<b>${dLbl(p.d, true)}</b><br>totale fin qui ${mTxt(p.y)}` + (lim ? `<br>restano ${kgTxt(Math.max(0, lim - p.y))}` : '') + `<br>nel giorno: ${mTxt(p.day[chM])}`)}"></div>`).join('');
+  $('chCumSub').textContent = (chM === 'kg' ? 'Kg' : 'Euro') + ' ordinati dall\'inizio' + (lim ? ` · ${Math.round(run / lim * 100)}% dei kg disponibili` : '');
+  $('chCum').innerHTML = `<div class="cu">${glC}${svg}${limEl}<div class="cols">${hit}</div></div><div class="dx"><span>${dLbl(days[0])}</span>${mid ? `<span>${mid}</span>` : ''}${days.length > 1 ? `<span>${dLbl(days.at(-1))}</span>` : ''}</div>`;
+  tipBind($('chCum'));
 }
 document.querySelector('#graf .seg').onclick = e => { const b = e.target.closest('button[data-m]'); if (!b) return;
   chM = b.dataset.m; document.querySelectorAll('#graf .seg button').forEach(x => x.classList.toggle('on', x === b)); renderCharts(); };
