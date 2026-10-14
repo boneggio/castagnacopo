@@ -87,6 +87,27 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
 .costs input,.money{width:100%;text-align:right}
 .money{width:90px}
 .tag{font-size:.72rem;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:1px 5px;margin-left:4px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:transparent;color:var(--muted);font:600 .82rem Inter,sans-serif;padding:6px 12px;cursor:pointer}
+.seg button.on{background:var(--brand);color:#fff}
+.ch h3{font:600 .9rem Inter,sans-serif;margin:0 0 2px}
+.ch .sub{color:var(--muted);font-size:.8rem;margin:0 0 10px;min-height:1.2em}
+.rk{display:grid;grid-template-columns:minmax(70px,max-content) 1fr;gap:6px 10px;align-items:center}
+.rk .nm{font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+.rk .tr{display:flex;align-items:center;gap:8px;min-width:0;cursor:default}
+.rk .b{height:14px;background:var(--brand);border-radius:0 4px 4px 0;min-width:2px;transition:opacity .15s}
+.rk .v{font-size:.8rem;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.rk .tr:hover .b,.dy .c:hover .b{opacity:.75}
+.dy{position:relative;height:190px;padding-left:44px}
+.dy .gl{position:absolute;left:44px;right:0;border-top:1px solid var(--line);font-size:.72rem;color:var(--muted)}
+.dy .gl span{position:absolute;right:calc(100% + 6px);top:-.7em;white-space:nowrap;font-variant-numeric:tabular-nums}
+.dy .cols{position:absolute;left:44px;right:0;top:0;bottom:0;display:flex;align-items:flex-end;gap:2px}
+.dy .c{flex:1;height:100%;display:flex;align-items:flex-end;min-width:0;cursor:default}
+.dy .b{width:100%;background:var(--brand);border-radius:4px 4px 0 0;min-height:0}
+.dx{display:flex;justify-content:space-between;padding-left:44px;font-size:.72rem;color:var(--muted);margin-top:4px}
+.chtip{position:fixed;z-index:20;pointer-events:none;background:var(--ink);color:var(--bg);font-size:.8rem;line-height:1.35;padding:7px 10px;border-radius:8px;max-width:240px;opacity:0;transition:opacity .1s}
+.chtip.on{opacity:1}
+.chempty{color:var(--muted);font-size:.85rem;padding:24px 0}
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
 .toast.on{opacity:1}
 #app{display:none}
@@ -203,6 +224,16 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
           <div class="row"><button class="btn sm" id="priceSave">Salva prezzi e quote</button></div>
           <p class="hint">I nuovi prezzi valgono per gli ordini fatti da adesso: quelli già arrivati mantengono costo e ricarico del momento. La quota dei referenti si calcola sempre con il valore attuale. Puoi dare a un referente una quota diversa con "Modifica".</p>
         </div>
+      </div>
+    </div>
+
+    <div class="card mb" id="graf">
+      <div class="bar"><h2 style="margin:0">Andamento vendite</h2>
+        <div class="seg noprint" role="group" aria-label="Misura dei grafici"><button type="button" data-m="kg" class="on">Kg</button><button type="button" data-m="euro">Euro</button></div>
+      </div>
+      <div class="grid2" style="margin:0">
+        <div class="ch"><h3>Chi vende di più</h3><p class="sub" id="chRankSub"></p><div id="chRank"></div></div>
+        <div class="ch"><h3>Vendite per giorno</h3><p class="sub" id="chDaySub"></p><div id="chDay"></div></div>
       </div>
     </div>
 
@@ -386,6 +417,7 @@ function render(){
   $('kEur').textContent = eur(sum('euro'));
   $('kPaid').textContent = eur(paid); $('kDue').textContent = 'da incassare ' + eur(sum('euro')-paid);
   $('kOrd').textContent = O.length; $('kDel').textContent = O.filter(o=>o.consegnato).length + ' consegnati';
+  renderCharts();
   $('sizes').innerHTML = [1,3,5,10].map(s=>`<div class="card sz"><b>${sum('q'+s)}</b><small>sacchi da ${s} kg<br>= ${sum('q'+s)*s} kg</small></div>`).join('');
 
   // impostazioni
@@ -603,6 +635,60 @@ $('pf').onsubmit = async e => {
     toast(was ? 'Preparatore aggiornato' : 'Preparatore aggiunto: copia il suo link e mandaglielo'); }
   catch(x){ toast('Non salvato: '+x.message); }
 };
+
+/* ----- grafici ----- */
+let chM = 'kg';
+const chTip = Object.assign(document.createElement('div'), {className:'chtip', role:'tooltip'}); document.body.appendChild(chTip);
+function tipShow(e, html){ chTip.innerHTML = html; chTip.classList.add('on');
+  const r = chTip.getBoundingClientRect(); let x = e.clientX + 14, y = e.clientY + 14;
+  if (x + r.width > innerWidth - 8) x = e.clientX - r.width - 14; if (y + r.height > innerHeight - 8) y = e.clientY - r.height - 14;
+  chTip.style.left = x + 'px'; chTip.style.top = y + 'px'; }
+function tipHide(){ chTip.classList.remove('on'); }
+const kgTxt = n => (n||0).toLocaleString('it-IT') + ' kg';
+const mTxt = n => chM === 'kg' ? kgTxt(n) : eur(n);
+const GG = ['dom','lun','mar','mer','gio','ven','sab'], MM = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
+const dLbl = (d, long) => { const t = new Date(d + 'T12:00:00'); return (long ? GG[t.getDay()] + ' ' : '') + t.getDate() + ' ' + MM[t.getMonth()]; };
+function tipBind(box){
+  box.onmousemove = e => { const t = e.target.closest('[data-tip]'); t ? tipShow(e, t.dataset.tip) : tipHide(); };
+  box.onmouseleave = tipHide;
+  box.onclick = e => { const t = e.target.closest('[data-tip]'); if (t) tipShow(e, t.dataset.tip); };
+}
+function renderCharts(){
+  const O = D.orders || [];
+  // chi vende di più
+  const g = {};
+  O.forEach(o => { const k = String(o.contatto || '').trim() || 'Senza contatto';
+    const x = g[k] || (g[k] = {nome:k, kg:0, euro:0, n:0}); x.kg += +o.kg || 0; x.euro += +o.euro || 0; x.n++; });
+  let rk = Object.values(g).sort((a, b) => b[chM] - a[chM] || a.nome.localeCompare(b.nome));
+  if (rk.length > 12) { const rest = rk.slice(11); rk = rk.slice(0, 11).concat([{nome:'Altri (' + rest.length + ')', kg:rest.reduce((t,x)=>t+x.kg,0), euro:rest.reduce((t,x)=>t+x.euro,0), n:rest.reduce((t,x)=>t+x.n,0)}]); }
+  const max1 = Math.max(0, ...rk.map(x => x[chM]));
+  const tot = O.reduce((t, o) => t + (+o[chM] || 0), 0);
+  $('chRankSub').textContent = rk.length ? (chM === 'kg' ? 'Kg ordinati' : 'Euro ordinati') + ' per referente o contatto' : '';
+  $('chRank').innerHTML = rk.length ? '<div class="rk">' + rk.map(x => {
+    const tip = `<b>${esc(x.nome)}</b><br>${x.n} ${x.n === 1 ? 'ordine' : 'ordini'} · ${kgTxt(x.kg)} · ${eur(x.euro)}` + (tot ? `<br>${Math.round(x[chM] / tot * 100)}% del totale` : '');
+    return `<div class="nm" title="${esc(x.nome)}">${esc(x.nome)}</div><div class="tr" data-tip="${esc(tip)}"><div class="b" style="width:${max1 ? x[chM] / max1 * 85 : 0}%"></div><span class="v">${mTxt(x[chM])}</span></div>`;
+  }).join('') + '</div>' : '<div class="chempty">Ancora nessun ordine.</div>';
+  tipBind($('chRank'));
+  // vendite per giorno
+  const byDay = {};
+  O.forEach(o => { const d = String(o.data || '').slice(0, 10); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+    const x = byDay[d] || (byDay[d] = {kg:0, euro:0, n:0}); x.kg += +o.kg || 0; x.euro += +o.euro || 0; x.n++; });
+  const ds = Object.keys(byDay).sort();
+  if (!ds.length) { $('chDaySub').textContent = ''; $('chDay').innerHTML = '<div class="chempty">Ancora nessun ordine.</div>'; return; }
+  const days = []; for (let t = Date.parse(ds[0] + 'T12:00:00Z'), end = Date.parse(ds.at(-1) + 'T12:00:00Z'); t <= end; t += 864e5) days.push(new Date(t).toISOString().slice(0, 10));
+  const vals = days.map(d => ({d, ...(byDay[d] || {kg:0, euro:0, n:0})}));
+  const best = vals.reduce((a, b) => b[chM] > a[chM] ? b : a);
+  const raw = Math.max(...vals.map(v => v[chM])), step = Math.pow(10, Math.floor(Math.log10(raw || 1))), top = Math.ceil((raw || 1) / step) * step;
+  $('chDaySub').textContent = `${chM === 'kg' ? 'Kg' : 'Euro'} ordinati ogni giorno · giorno migliore ${dLbl(best.d, true)} (${mTxt(best[chM])})`;
+  const gl = [1, .5, 0].map(f => `<div class="gl" style="top:${(1 - f) * 100}%"><span>${chM === 'kg' ? (top * f).toLocaleString('it-IT') : eur(top * f).replace(',00', '')}</span></div>`).join('');
+  const cols = vals.map(v => { const tip = `<b>${dLbl(v.d, true)}</b><br>` + (v.n ? `${v.n} ${v.n === 1 ? 'ordine' : 'ordini'} · ${kgTxt(v.kg)} · ${eur(v.euro)}` : 'nessun ordine');
+    return `<div class="c" data-tip="${esc(tip)}"><div class="b" style="height:${v[chM] / top * 100}%"></div></div>`; }).join('');
+  const mid = days.length > 2 ? dLbl(days[Math.floor((days.length - 1) / 2)]) : '';
+  $('chDay').innerHTML = `<div class="dy">${gl}<div class="cols">${cols}</div></div><div class="dx"><span>${dLbl(days[0])}</span>${mid ? `<span>${mid}</span>` : ''}${days.length > 1 ? `<span>${dLbl(days.at(-1))}</span>` : ''}</div>`;
+  tipBind($('chDay'));
+}
+document.querySelector('#graf .seg').onclick = e => { const b = e.target.closest('button[data-m]'); if (!b) return;
+  chM = b.dataset.m; document.querySelectorAll('#graf .seg button').forEach(x => x.classList.toggle('on', x === b)); renderCharts(); };
 
 /* ----- avvisi Telegram ----- */
 function tgShow(j){
