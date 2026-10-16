@@ -10,8 +10,8 @@
  */
 
 const TZ = 'Europe/Rome';
-const SIZES = [1, 3, 5, 10];
-const DEFAULT_COSTS = [6.5, 16.5, 24, 52];
+const SIZES = [1, 2, 3, 5];
+const DEFAULT_COSTS = [6, 12, 18, 30];
 const DEFAULT_MSG = 'Le prenotazioni sono chiuse. Se ci sarà nuova disponibilità vi avviseremo. Grazie!';
 const SITE = 'https://castagnacopo.boneggio.it';
 
@@ -97,9 +97,9 @@ async function prepByToken(env, tk) {
 
 const toOrder = r => ({
   id: r.id, data: r.data, nome: r.nome, cognome: r.cognome, telefono: r.telefono, ref: r.ref, contatto: r.contatto,
-  q1: r.q1, q3: r.q3, q5: r.q5, q10: r.q10, kg: r.kg, euro: r.euro, note: r.note,
+  q1: r.q1, q2: r.q2, q3: r.q3, q5: r.q5, kg: r.kg, euro: r.euro, note: r.note,
   pagato: !!r.pagato, consegnato: !!r.consegnato, costo: r.costo, ricarico: r.ricarico,
-  r1: r.r1, r3: r.r3, r5: r.r5, r10: r.r10, prontoDal: r.pronto_dal, prepBy: r.prep_by
+  r1: r.r1, r2: r.r2, r3: r.r3, r5: r.r5, prontoDal: r.pronto_dal, prepBy: r.prep_by
 });
 async function readOrders(env, year) {
   const { results } = await env.DB.prepare('SELECT * FROM ordini WHERE anno = ?1 ORDER BY pos, rowid').bind(String(year)).all();
@@ -213,9 +213,9 @@ async function mine(env, tk, anno) {
   if (!ref) return { ok: false, error: 'Link non valido. Chiedi un nuovo link a chi organizza.' };
   const year = isYear(anno) ? anno : thisYear();
   const orders = ordersOfRef(await readOrders(env, year), ref)
-    .map(o => ({ id: o.id, nome: o.nome, cognome: o.cognome, telefono: o.telefono, q1: o.q1, q3: o.q3, q5: o.q5, q10: o.q10,
+    .map(o => ({ id: o.id, nome: o.nome, cognome: o.cognome, telefono: o.telefono, q1: o.q1, q2: o.q2, q3: o.q3, q5: o.q5,
       kg: o.kg, euro: o.euro, note: o.note, pagato: o.pagato, consegnato: o.consegnato, data: o.data,
-      r1: o.r1, r3: o.r3, r5: o.r5, r10: o.r10, prontoDal: o.prontoDal }));
+      r1: o.r1, r2: o.r2, r3: o.r3, r5: o.r5, prontoDal: o.prontoDal }));
   const out = { ok: true, nome: ref.nome, anno: year, anni: await years(env), orders, rate: ref.rate };
   // solo per i referenti abilitati: classifica in kg, totale venduto e kg ancora disponibili
   if (ref.stats) {
@@ -233,7 +233,7 @@ async function prep(env, tk, anno) {
   if (!pr) return { ok: false, error: 'Link non valido. Chiedi un nuovo link a chi organizza.' };
   const year = isYear(anno) ? anno : thisYear();
   const orders = (await readOrders(env, year)).map(o => ({ id: o.id, nome: o.nome, cognome: o.cognome, contatto: o.contatto, data: o.data,
-    q1: o.q1, q3: o.q3, q5: o.q5, q10: o.q10, r1: o.r1, r3: o.r3, r5: o.r5, r10: o.r10, kg: o.kg,
+    q1: o.q1, q2: o.q2, q3: o.q3, q5: o.q5, r1: o.r1, r2: o.r2, r3: o.r3, r5: o.r5, kg: o.kg,
     prontoDal: o.prontoDal, prepBy: o.prepBy, consegnato: o.consegnato }));
   return { ok: true, nome: pr.nome, anno: year, anni: await years(env), orders };
 }
@@ -276,7 +276,7 @@ async function order(env, ctx, d) {
   const id = 'o' + crypto.randomUUID().slice(0, 8);
   const telefono = clean(d.telefono, 30), note = clean(d.note, 500);
   const res = { ok: true, kg, euro, ritiro: s.ritiro };
-  const stmts = [env.DB.prepare(`INSERT INTO ordini (id, anno, data, nome, cognome, telefono, ref, contatto, q1, q3, q5, q10, kg, euro, note, costo, ricarico, pos)
+  const stmts = [env.DB.prepare(`INSERT INTO ordini (id, anno, data, nome, cognome, telefono, ref, contatto, q1, q2, q3, q5, kg, euro, note, costo, ricarico, pos)
       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, (SELECT COALESCE(MAX(pos), 0) + 1 FROM ordini))`)
     .bind(id, now.year, now.stamp, nome, cognome, telefono, ref, contatto, qty[0], qty[1], qty[2], qty[3], kg, euro, note, costo, ricarico)];
   if (rid) {
@@ -344,15 +344,15 @@ async function prepSet(env, d) {
   const pr = await prepByToken(env, d.t);
   if (!pr) return { ok: false, error: 'Link non valido' };
   const year = isYear(d.anno) ? String(d.anno) : thisYear();
-  const row = await env.DB.prepare('SELECT q1, q3, q5, q10, pronto_dal FROM ordini WHERE anno = ?1 AND id = ?2').bind(year, String(d.id)).first();
+  const row = await env.DB.prepare('SELECT q1, q2, q3, q5, pronto_dal FROM ordini WHERE anno = ?1 AND id = ?2').bind(year, String(d.id)).first();
   if (!row) return { ok: false, error: 'Ordine non trovato (forse è stato annullato)' };
-  const q = [row.q1, row.q3, row.q5, row.q10];
+  const q = [row.q1, row.q2, row.q3, row.q5];
   const r = SIZES.map((z, k) => Math.max(0, Math.min(q[k], parseInt((d.r || {})[z], 10) || 0)));
   // data di ritiro: la decide il preparatore ('aaaa-mm-gg' oppure '' per toglierla); se non la manda resta quella di prima
   const dal = ('dal' in d) ? (/^\d{4}-\d{2}-\d{2}$/.test(String(d.dal)) ? String(d.dal) : '') : row.pronto_dal;
-  await env.DB.prepare('UPDATE ordini SET r1 = ?1, r3 = ?2, r5 = ?3, r10 = ?4, pronto_dal = ?5, prep_by = ?6 WHERE anno = ?7 AND id = ?8')
+  await env.DB.prepare('UPDATE ordini SET r1 = ?1, r2 = ?2, r3 = ?3, r5 = ?4, pronto_dal = ?5, prep_by = ?6 WHERE anno = ?7 AND id = ?8')
     .bind(r[0], r[1], r[2], r[3], dal, r.some(x => x > 0) ? pr.nome : '', year, String(d.id)).run();
-  return { ok: true, id: String(d.id), r1: r[0], r3: r[1], r5: r[2], r10: r[3], prontoDal: dal };
+  return { ok: true, id: String(d.id), r1: r[0], r2: r[1], r3: r[2], r5: r[3], prontoDal: dal };
 }
 
 async function saveSettings(env, d) {
