@@ -213,9 +213,10 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
             <label>Prezzo del produttore per sacco (€)</label>
             <div class="costs" style="margin-top:6px">
               <label>1 kg<input id="c1" inputmode="decimal"></label>
+              <label>2 kg<input id="c2" inputmode="decimal"></label>
               <label>3 kg<input id="c3" inputmode="decimal"></label>
               <label>5 kg<input id="c5" inputmode="decimal"></label>
-              <label>10 kg<input id="c10" inputmode="decimal"></label>
+              
             </div>
           </div>
           <div class="row">
@@ -226,9 +227,10 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
             <label>Prezzo di vendita per sacco (€)</label>
             <div class="costs" style="margin-top:6px">
               <label>1 kg<input id="v1" inputmode="decimal"></label>
+              <label>2 kg<input id="v2" inputmode="decimal"></label>
               <label>3 kg<input id="v3" inputmode="decimal"></label>
               <label>5 kg<input id="v5" inputmode="decimal"></label>
-              <label>10 kg<input id="v10" inputmode="decimal"></label>
+              
             </div>
             <p class="hint" style="margin-top:4px">Lascia vuoto per usare il prezzo calcolato col ricarico (mostrato in grigio). Se lo scrivi a mano, vale quello.</p>
           </div>
@@ -278,7 +280,7 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
         <thead><tr>
           <th class="nosort noprint"><input type="checkbox" id="all" aria-label="Seleziona tutti"></th>
           <th data-k="data">Data</th><th data-k="cognome">Cognome</th><th data-k="nome">Nome</th><th data-k="telefono">Telefono</th><th data-k="contatto">Contatto</th>
-          <th class="n" data-k="q1">1 kg</th><th class="n" data-k="q3">3 kg</th><th class="n" data-k="q5">5 kg</th><th class="n" data-k="q10">10 kg</th>
+          <th class="n" data-k="q1">1 kg</th><th class="n" data-k="q2">2 kg</th><th class="n" data-k="q3">3 kg</th><th class="n" data-k="q5">5 kg</th>
           <th class="n" data-k="kg">Kg</th><th class="n" data-k="euro">Euro</th>
           <th class="c" data-k="pronti">Pronti</th><th class="c" data-k="pagato">Pagato</th><th class="c" data-k="consegnato">Consegn.</th><th data-k="note">Note</th>
         </tr></thead>
@@ -341,7 +343,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const eur = n => (n||0).toLocaleString('it-IT',{style:'currency',currency:'EUR'});
 const fmtD = s => { const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/); return m ? `${m[3]}/${m[2]} ${m[4]}:${m[5]}` : s; };
-const sacchi = o => [1,3,5,10].filter(s=>o['q'+s]).map(s=>`${o['q'+s]}×${s} kg`).join(', ');
+const sacchi = o => [1,2,3,5].filter(s=>o['q'+s]).map(s=>`${o['q'+s]}×${s} kg`).join(', ');
 let D = {orders:[],referenti:[],settings:{}}, anno='', sortK='data', sortDir=-1, key='', sel=new Set(), pending=null, rPending=null, editCode='', adoptName='';
 try { key = sessionStorage.getItem('ck') || ''; } catch(e) {}
 
@@ -396,8 +398,8 @@ function money(list, rate){
   const kg = s('kg'), ref = Math.round(kg*rate*100)/100;
   return { kg, euro:s('euro'), costo:s('costo'), ricarico:s('ricarico'), ref };
 }
-const nS = (o,p) => [1,3,5,10].reduce((t,z)=>t+(+o[p+z]||0),0);
-const isFull = o => nS(o,'q')>0 && [1,3,5,10].every(z=>(+o['r'+z]||0)===(+o['q'+z]||0));
+const nS = (o,p) => [1,2,3,5].reduce((t,z)=>t+(+o[p+z]||0),0);
+const isFull = o => nS(o,'q')>0 && [1,2,3,5].every(z=>(+o['r'+z]||0)===(+o['q'+z]||0));
 function prBadge(o){
   const n=nS(o,'q'), r=nS(o,'r');
   if (isFull(o)) return `<span class="pr full" title="${o.prepBy?'Preparato da '+esc(o.prepBy):''}">✓ ${o.prontoDal?fmtDay(o.prontoDal):'pronto'}</span>`;
@@ -414,8 +416,8 @@ function summary(g){
   return `Ciao ${nome}! Ecco il riepilogo delle castagne Castagnacopo ${anno} ordinate tramite te:\n\n${righe.join('\n') || 'Nessun ordine per ora.'}\n\nTotale: ${kg} kg, ${eur(tot)}\nDa incassare: ${eur(due)}${guad}${g.ref && g.ref.tk ? `\n\nI tuoi ordini (pagamenti, ritiri e sacchetti pronti) li trovi qui:\n${SITE}/riscossioni.html?k=${g.ref.tk}` : ''}\n\nGrazie!`;
 }
 function csvOf(list, name){
-  const cols=['data','cognome','nome','telefono','contatto','q1','q3','q5','q10','kg','euro','costo','ricarico','pagato','consegnato','note'];
-  const head=['Data','Cognome','Nome','Telefono','Contatto','1 kg','3 kg','5 kg','10 kg','Kg','Euro','Costo produttore','Ricarico','Pagato','Consegnato','Note'];
+  const cols=['data','cognome','nome','telefono','contatto','q1','q2','q3','q5','kg','euro','costo','ricarico','pagato','consegnato','note'];
+  const head=['Data','Cognome','Nome','Telefono','Contatto','1 kg','2 kg','3 kg','5 kg','Kg','Euro','Costo produttore','Ricarico','Pagato','Consegnato','Note'];
   const csv=[head].concat(list.map(o=>cols.map(c=>(c==='euro'||c==='costo'||c==='ricarico')?String(o[c]).replace('.',','):(c==='pagato'||c==='consegnato')?(o[c]?'sì':'no'):o[c])))
     .map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\n');
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv'})); a.download=name; a.click();
@@ -436,7 +438,7 @@ function render(){
   $('kPaid').textContent = eur(paid); $('kDue').textContent = 'da incassare ' + eur(sum('euro')-paid);
   $('kOrd').textContent = O.length; $('kDel').textContent = O.filter(o=>o.consegnato).length + ' consegnati';
   renderCharts();
-  $('sizes').innerHTML = [1,3,5,10].map(s=>`<div class="card sz"><b>${sum('q'+s)}</b><small>sacchi da ${s} kg<br>= ${sum('q'+s)*s} kg</small></div>`).join('');
+  $('sizes').innerHTML = [1,2,3,5].map(s=>`<div class="card sz"><b>${sum('q'+s)}</b><small>sacchi da ${s} kg<br>= ${sum('q'+s)*s} kg</small></div>`).join('');
 
   // impostazioni
   const st = D.settings || {};
@@ -454,11 +456,11 @@ function render(){
   $('limitHint').textContent = st.limit ? `Ordinati quest'anno ${D.kgYear} kg su ${st.limit}: restano ${Math.max(0, st.limit - D.kgYear)} kg. Al termine la pagina si chiude da sola.` : `Ordinati quest'anno ${D.kgYear} kg. Lascia vuoto per non mettere limiti.`;
 
   // prezzi e quote
-  const costs = st.costs || [6.5,16.5,24,52];
-  [1,3,5,10].forEach((z,i) => { if (document.activeElement !== $('c'+z)) $('c'+z).value = fmtN(costs[i]); });
+  const costs = st.costs || [6,12,18,30];
+  [1,2,3,5].forEach((z,i) => { if (document.activeElement !== $('c'+z)) $('c'+z).value = fmtN(costs[i]); });
   if (document.activeElement !== $('markup')) $('markup').value = fmtN(st.markup || 0);
   const sale = st.sale || ['','','',''];
-  [1,3,5,10].forEach((z,i) => { if (document.activeElement !== $('v'+z)) $('v'+z).value = fmtN(sale[i]); });
+  [1,2,3,5].forEach((z,i) => { if (document.activeElement !== $('v'+z)) $('v'+z).value = fmtN(sale[i]); });
   if (document.activeElement !== $('quota')) $('quota').value = fmtN(st.quota || 0);
   priceHint();
 
@@ -515,14 +517,14 @@ function render(){
   const list = filtered();
   $('tb').innerHTML = list.map(o=>`<tr class="${sel.has(o.id)?'sel':''} ${o.pagato&&o.consegnato?'done':''}"><td class="noprint"><input type="checkbox" data-id="${esc(o.id)}" ${sel.has(o.id)?'checked':''} aria-label="Seleziona ${esc(o.nome)} ${esc(o.cognome)}"></td>
     <td>${esc(fmtD(o.data))}</td><td>${esc(o.cognome)}</td><td>${esc(o.nome)}</td><td>${esc(o.telefono)}</td><td>${esc(o.contatto)}</td>
-    <td class="n">${o.q1||''}</td><td class="n">${o.q3||''}</td><td class="n">${o.q5||''}</td><td class="n">${o.q10||''}</td>
+    <td class="n">${o.q1||''}</td><td class="n">${o.q2||''}</td><td class="n">${o.q3||''}</td><td class="n">${o.q5||''}</td>
     <td class="n"><b>${o.kg}</b></td><td class="n">${eur(o.euro)}</td>
     <td class="c">${prBadge(o)}</td>
     <td class="c"><input type="checkbox" data-f="pagato" data-id="${esc(o.id)}" ${o.pagato?'checked':''} aria-label="Pagato"></td>
     <td class="c"><input type="checkbox" data-f="consegnato" data-id="${esc(o.id)}" ${o.consegnato?'checked':''} aria-label="Consegnato"></td>
     <td class="note">${esc(o.note)}</td></tr>`).join('') || '<tr><td colspan="16" class="muted">Nessun ordine.</td></tr>';
   const fl = $('q').value.trim() || $('fRef').value || $('fSt').value;
-  $('tf').innerHTML = `<tr><td class="noprint"></td><td colspan="5">Totale${fl?' (filtrato)':''}</td><td class="n">${sum('q1',list)}</td><td class="n">${sum('q3',list)}</td><td class="n">${sum('q5',list)}</td><td class="n">${sum('q10',list)}</td><td class="n">${sum('kg',list)}</td><td class="n">${eur(sum('euro',list))}</td><td class="c">${list.filter(isFull).length}</td><td class="c">${list.filter(o=>o.pagato).length}</td><td class="c">${list.filter(o=>o.consegnato).length}</td><td></td></tr>`;
+  $('tf').innerHTML = `<tr><td class="noprint"></td><td colspan="5">Totale${fl?' (filtrato)':''}</td><td class="n">${sum('q1',list)}</td><td class="n">${sum('q2',list)}</td><td class="n">${sum('q3',list)}</td><td class="n">${sum('q5',list)}</td><td class="n">${sum('kg',list)}</td><td class="n">${eur(sum('euro',list))}</td><td class="c">${list.filter(isFull).length}</td><td class="c">${list.filter(o=>o.pagato).length}</td><td class="c">${list.filter(o=>o.consegnato).length}</td><td></td></tr>`;
   $('all').checked = list.length>0 && list.every(o=>sel.has(o.id));
   ['mkPaid','mkDel','delSel'].forEach(id=>$(id).disabled = sel.size===0);
   $('selInfo').textContent = sel.size ? `${sel.size} selezionat${sel.size===1?'o':'i'}` : 'Seleziona uno o più ordini per le azioni';
@@ -566,7 +568,7 @@ $('addKgGo').onclick = () => { const n = parseInt($('addKg').value,10); if(!(n>0
 $('limitSave').onclick = () => saveSettings({limit: $('limit').value}, $('limit').value ? 'Limite salvato' : 'Limite tolto');
 $('msgSave').onclick = () => saveSettings({msg: $('cmsg').value}, 'Messaggio salvato');
 $('ritiroSave').onclick = () => saveSettings({ritiro: $('ritiro').value}, $('ritiro').value.trim() ? 'Informazioni per il ritiro salvate' : 'Informazioni per il ritiro tolte');
-const SZ = [1,3,5,10];
+const SZ = [1,2,3,5];
 function readPrices(){
   const num0 = id => $(id).value.trim()==='' ? 0 : num($(id).value);   // campo vuoto = 0
   const c = SZ.map(z=>num($('c'+z).value)), m = num0('markup'), q = num0('quota');
@@ -587,7 +589,7 @@ function priceHint(){
     + '<br>Tuo ricarico per sacco: ' + SZ.map((z,i)=>`${z} kg ${eur(P.final[i]-P.c[i])}`).join(' · ')
     + (warn.length ? `<br><span style="color:var(--err)">Attenzione: ${warn.join('; ')}.</span>` : '');
 }
-['c1','c3','c5','c10','markup','quota','v1','v3','v5','v10'].forEach(id => $(id).addEventListener('input', priceHint));
+['c1','c2','c3','c5','markup','quota','v1','v2','v3','v5'].forEach(id => $(id).addEventListener('input', priceHint));
 $('priceSave').onclick = () => {
   const P = readPrices();
   if (!P.ok) return toast('Controlla i valori inseriti');
