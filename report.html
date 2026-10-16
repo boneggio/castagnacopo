@@ -490,12 +490,13 @@ function render(){
          <button class="btn sm ghost" data-a="csv" data-k="${esc(g.key)}">CSV</button>
          <button class="btn sm ghost" data-a="link" data-k="${esc(g.key)}">Link ordini</button>
          <button class="btn sm ghost" data-a="rlink" data-k="${esc(g.key)}">Link I miei ordini</button>
+         <button class="btn sm ghost" data-a="stats" data-k="${esc(g.key)}" title="Mostra nella sua pagina la classifica, il totale venduto e i kg disponibili">${g.ref.stats ? 'Togli classifica' : 'Mostra classifica'}</button>
          <button class="btn sm ghost" data-a="edit" data-k="${esc(g.key)}">Modifica</button>
          <button class="btn sm danger ghost" data-a="del" data-k="${esc(g.key)}">Elimina</button>`
       : `<button class="btn sm ghost" data-a="copy" data-k="${esc(g.key)}">Copia riepilogo</button>
          <button class="btn sm ghost" data-a="csv" data-k="${esc(g.key)}">CSV</button>
          <button class="btn sm ghost" data-a="adopt" data-k="${esc(g.key)}">Aggiungi come referente</button>`;
-    return `<tr><td><b>${esc(g.nome)}</b>${g.ref?'':'<span class="tag">scritto a mano</span>'}</td><td>${g.ref ? esc(g.ref.wa)||'<span class="muted">—</span>' : '<span class="muted">—</span>'}</td>
+    return `<tr><td><b>${esc(g.nome)}</b>${g.ref?(g.ref.stats?'<span class="tag">vede classifica</span>':''):'<span class="tag">scritto a mano</span>'}</td><td>${g.ref ? esc(g.ref.wa)||'<span class="muted">—</span>' : '<span class="muted">—</span>'}</td>
       <td class="n">${g.orders.length}</td><td class="n">${kg}</td><td class="n">${eur(tot)}</td><td class="n">${due?eur(due):'—'}</td>
       <td class="n">${rateTxt}</td><td class="n">${g.ref?eur(qAll):'—'}</td><td class="n">${g.ref?eur(qPaid):'—'}</td><td class="noprint"><div class="acts">${acts}</div></td></tr>`;
   }).join('') || '<tr><td colspan="10" class="muted">Nessun referente. Aggiungine uno qui sotto.</td></tr>';
@@ -605,6 +606,7 @@ $('refTb').onclick = e => {
   const a = b.dataset.a;
   if (a==='copy') copy(summary(g), 'Riepilogo copiato');
   if (a==='csv') csvOf(g.orders, `castagnacopo-${anno}-${(g.ref?g.ref.code:g.nome).replace(/[^\w-]+/g,'_')}.csv`);
+  if (a==='stats'){ const v=!g.ref.stats; post({action:'refStats', code:g.ref.code, value:v}).then(j=>{ D.referenti=j.referenti; render(); toast(v ? `${g.ref.nome} ora vede classifica e disponibilità` : `${g.ref.nome} non vede più la classifica`); }).catch(x=>toast('Non salvato: '+x.message)); }
   if (a==='rlink') copy(`${SITE}/riscossioni.html?k=${g.ref.tk}`, 'Link "I miei ordini" copiato');
   if (a==='link') copy(`${SITE}/?r=${g.ref.code}`, 'Link copiato: ' + `${SITE}/?r=${g.ref.code}`);
   if (a==='edit'){ adoptName=''; editCode=g.ref.code; $('rfNome').value=g.ref.nome; $('rfWa').value=g.ref.wa; $('rfQuota').value=fmtN(g.ref.quota); $('rfGo').textContent='Salva modifiche'; $('rfCancel').hidden=false; $('rfNome').focus(); }
