@@ -439,13 +439,130 @@ async function prepDelete(env, d) {
 
 /* ---------- smistamento ---------- */
 
+/* ---------- accesso admin: sessioni e verifica in due passaggi (TOTP, RFC 6238) ---------- */
+
+const SESS_DAYS = 30, MAX_FAILS = 10, FAIL_WINDOW = 15 * 60 * 1000;
+const hex = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+const randHex = n => hex(crypto.getRandomValues(new Uint8Array(n)));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+function b32enc(bytes) {
+  let bits = 0, val = 0, out = '';
+  for (const b of bytes) { val = (val << 8) | b; bits += 8; while (bits >= 5) { out += B32[(val >>> (bits - 5)) & 31]; bits -= 5; } }
+  if (bits > 0) out += B32[(val << (5 - bits)) & 31];
+  return out;
+}
+function b32dec(str) {
+  const clean = String(str).toUpperCase().replace(/[^A-Z2-7]/g, ''), out = [];
+  let bits = 0, val = 0;
+  for (const c of clean) { val = (val << 5) | B32.indexOf(c); bits += 5; if (bits >= 8) { out.push((val >>> (bits - 8)) & 255); bits -= 8; } }
+  return new Uint8Array(out);
+}
+async function hotp(secret, counter) {
+  const key = await crypto.subtle.importKey('raw', b32dec(secret), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+  const msg = new Uint8Array(8); let c = counter;
+  for (let i = 7; i >= 0; i--) { msg[i] = c & 255; c = Math.floor(c / 256); }
+  const h = new Uint8Array(await crypto.subtle.sign('HMAC', key, msg)), o = h[19] & 15;
+  const bin = ((h[o] & 127) << 24) | (h[o + 1] << 16) | (h[o + 2] << 8) | h[o + 3];
+  return String(bin % 1000000).padStart(6, '0');
+}
+async function totpOk(secret, code) {
+  code = String(code || '').replace(/\D/g, '');
+  if (!secret || code.length !== 6) return false;
+  const t = Math.floor(Date.now() / 30000);
+  for (const d of [-1, 0, 1]) if (await hotp(secret, t + d) === code) return true;
+  return false;
+}
+// codice TOTP oppure codice di emergenza (monouso: viene cancellato)
+async function secondFactorOk(env, p, code) {
+  if (await totpOk(p.totp_secret, code)) return true;
+  const c = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (c.length < 8) return false;
+  const r = await env.DB.prepare('DELETE FROM codici_emergenza WHERE h = ?1').bind(await sha256(c)).run();
+  return (r.meta.changes || 0) > 0;
+}
+async function tooManyFails(env) {
+  const r = await env.DB.prepare('SELECT COUNT(*) AS n FROM tentativi WHERE ts > ?1').bind(Date.now() - FAIL_WINDOW).first();
+  return (r && r.n || 0) >= MAX_FAILS;
+}
+async function fail(env, error) {
+  await env.DB.batch([env.DB.prepare('INSERT INTO tentativi (ts) VALUES (?1)').bind(Date.now()),
+    env.DB.prepare('DELETE FROM tentativi WHERE ts < ?1').bind(Date.now() - FAIL_WINDOW)]);
+  await sleep(800);
+  return { ok: false, error };
+}
+async function login(env, d) {
+  if (await tooManyFails(env)) return { ok: false, error: 'troppi_tentativi', _status: 429 };
+  if (!await checkKey(env, d.password)) return fail(env, 'Password errata');
+  const p = await getProps(env);
+  if (p.totp_on === '1') {
+    if (!String(d.codice || '').trim()) return { ok: false, error: 'codice_richiesto' };
+    if (!await secondFactorOk(env, p, d.codice)) return fail(env, 'Codice errato');
+  }
+  const tok = randHex(24), now = Date.now();
+  await env.DB.batch([env.DB.prepare('INSERT INTO sessioni (h, exp) VALUES (?1, ?2)').bind(await sha256(tok), now + SESS_DAYS * 864e5),
+    env.DB.prepare('DELETE FROM sessioni WHERE exp < ?1').bind(now)]);
+  return { ok: true, sessione: tok };
+}
+async function sessionOk(env, tok) {
+  if (!/^[0-9a-f]{48}$/.test(String(tok || ''))) return false;
+  return !!await env.DB.prepare('SELECT 1 FROM sessioni WHERE h = ?1 AND exp > ?2').bind(await sha256(tok), Date.now()).first();
+}
+// null = accesso consentito; altrimenti la risposta di errore
+async function adminAuth(env, d) {
+  if (d.sessione) return await sessionOk(env, d.sessione) ? null : { ok: false, error: 'sessione' };
+  const p = await getProps(env);
+  if (p.totp_on === '1') return { ok: false, error: 'sessione' };
+  if (await tooManyFails(env)) return { ok: false, error: 'troppi_tentativi', _status: 429 };
+  return await checkKey(env, d.key) ? null : fail(env, 'Password errata');
+}
+async function security(env) {
+  const p = await getProps(env);
+  const r = await env.DB.prepare('SELECT COUNT(*) AS n FROM codici_emergenza').first();
+  return { ok: true, totp: p.totp_on === '1', emergenza: r ? r.n : 0 };
+}
+async function tfaNew(env) {
+  const secret = b32enc(crypto.getRandomValues(new Uint8Array(20)));
+  await setProp(env, 'totp_pending', secret);
+  return { ok: true, secret, uri: `otpauth://totp/${encodeURIComponent('Castagnacopo:admin')}?secret=${secret}&issuer=Castagnacopo&algorithm=SHA1&digits=6&period=30` };
+}
+async function tfaOn(env, d) {
+  const p = await getProps(env);
+  if (!p.totp_pending) return { ok: false, error: 'Genera prima il codice QR' };
+  if (!await totpOk(p.totp_pending, d.codice)) return fail(env, 'Codice errato: controlla l\'ora del telefono e riprova');
+  const codes = [];
+  for (let i = 0; i < 8; i++) { const c = b32enc(crypto.getRandomValues(new Uint8Array(5))); codes.push(c.slice(0, 4) + '-' + c.slice(4, 8)); }
+  const st = [env.DB.prepare('DELETE FROM codici_emergenza')];
+  for (const c of codes) st.push(env.DB.prepare('INSERT INTO codici_emergenza (h) VALUES (?1)').bind(await sha256(c.replace('-', ''))));
+  await env.DB.batch(st);
+  await setProp(env, 'totp_secret', p.totp_pending);
+  await setProp(env, 'totp_on', '1');
+  await env.DB.prepare("DELETE FROM settings WHERE key = 'totp_pending'").run();
+  return { ok: true, emergenza: codes };
+}
+async function tfaOff(env, d) {
+  const p = await getProps(env);
+  if (p.totp_on !== '1') return { ok: true };
+  if (!await secondFactorOk(env, p, d.codice)) return fail(env, 'Codice errato');
+  await env.DB.batch([env.DB.prepare("DELETE FROM settings WHERE key IN ('totp_on','totp_secret','totp_pending')"),
+    env.DB.prepare('DELETE FROM codici_emergenza')]);
+  return { ok: true };
+}
+async function logout(env, d, all) {
+  if (all) await env.DB.prepare('DELETE FROM sessioni').run();
+  else if (d.sessione) await env.DB.prepare('DELETE FROM sessioni WHERE h = ?1').bind(await sha256(String(d.sessione))).run();
+  return { ok: true };
+}
+
 async function handleGet(env, url) {
   const p = Object.fromEntries(url.searchParams);
   if (p.action === 'info') return info(env);
   if (p.action === 'mine') return mine(env, p.t, p.anno);
   if (p.action === 'prep') return prep(env, p.t, p.anno);
   if (p.action !== 'report') return { ok: true, service: 'castagnacopo' };
-  if (!await checkKey(env, p.key)) return { ok: false, error: 'Password errata' };
+  // vecchio accesso con password nell'indirizzo: solo se la verifica in due passaggi è spenta
+  const no = await adminAuth(env, { key: p.key });
+  if (no) return no;
   return report(env, p);
 }
 
@@ -455,8 +572,17 @@ async function handlePost(env, ctx, request) {
   if (d.action === 'mineFlag') return mineFlag(env, d);
   if (d.action === 'mineDelete') return mineDelete(env, ctx, d);
   if (d.action === 'prepSet') return prepSet(env, d);
+  if (d.action === 'login') return login(env, d);
+  if (d.action === 'logout') return logout(env, d, false);
   if (d.action) {
-    if (!await checkKey(env, d.key)) return { ok: false, error: 'Password errata' };
+    const no = await adminAuth(env, d);
+    if (no) return no;
+    if (d.action === 'report') return report(env, d);
+    if (d.action === 'logout_tutti') return logout(env, d, true);
+    if (d.action === 'sicurezza') return security(env);
+    if (d.action === 'admin_2fa_nuovo') return tfaNew(env);
+    if (d.action === 'admin_2fa_attiva') return tfaOn(env, d);
+    if (d.action === 'admin_2fa_disattiva') return tfaOff(env, d);
     if (d.action === 'delete') return remove(env, d);
     if (d.action === 'flag') return flag(env, d);
     if (d.action === 'settings') return saveSettings(env, d);
@@ -479,9 +605,10 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
     if (url.pathname !== '/' && url.pathname !== '/api') return json({ ok: false, error: 'Non trovato' }, 404);
     try {
-      if (request.method === 'GET') return json(await handleGet(env, url));
-      if (request.method === 'POST') return json(await handlePost(env, ctx, request));
-      return json({ ok: false, error: 'Metodo non permesso' }, 405);
+      const out = request.method === 'GET' ? await handleGet(env, url) : request.method === 'POST' ? await handlePost(env, ctx, request) : null;
+      if (!out) return json({ ok: false, error: 'Metodo non permesso' }, 405);
+      const status = out._status || 200; delete out._status;
+      return json(out, status);
     } catch (err) {
       return json({ ok: false, error: String(err && err.message || err) });
     }
