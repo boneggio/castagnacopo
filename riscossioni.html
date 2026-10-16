@@ -42,6 +42,21 @@ h1{font-family:Fraunces,Georgia,serif;font-weight:800;color:var(--brand);margin:
 .pt tr+tr td{border-top:1px solid var(--line)}
 .pt .c-ok{color:var(--ok)} .pt .c-part{color:#c9731a} .pt .c-todo{color:var(--err)} .pt .c-none{color:var(--muted);font-weight:400}
 @media (prefers-color-scheme:dark){.pt .c-part{color:#f0a24a}}
+.stc{margin-bottom:14px}
+.stc h2{font-family:Fraunces,Georgia,serif;font-size:1.05rem;margin:0 0 10px}
+.stk{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.stk div{background:var(--bg);border-radius:12px;padding:10px 12px}
+.stk small{display:block;color:var(--muted);font-size:.75rem}
+.stk b{font-family:Fraunces,Georgia,serif;font-size:1.3rem;font-variant-numeric:tabular-nums}
+.stbar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin:2px 0 14px}
+.stbar i{display:block;height:100%;background:var(--brand);border-radius:4px}
+.rk{display:grid;grid-template-columns:minmax(60px,max-content) 1fr;gap:6px 10px;align-items:center}
+.rk .nm{font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
+.rk .nm.me{font-weight:700}
+.rk .tr{display:flex;align-items:center;gap:8px;min-width:0}
+.rk .b{height:14px;background:var(--brand);border-radius:0 4px 4px 0;min-width:2px;opacity:.55}
+.rk .b.me{opacity:1}
+.rk .v{font-size:.82rem;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
 .sumcard{margin-bottom:14px}
 .sumcard h2{font-family:Fraunces,Georgia,serif;font-size:1.05rem;margin:0 0 8px}
 .sumcard .pt{font-size:.95rem}
@@ -97,6 +112,13 @@ footer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:24px}
       <div class="card kpi"><small>Ordini</small><b id="kOrd">0</b></div>
       <div class="card kpi"><small>Castagne</small><b id="kKg">0</b></div>
       <div class="card kpi earn" id="earn" hidden><small id="kRate">La tua quota</small><b id="kEarn">0</b><div class="det" id="kEarnPaid"></div></div>
+    </div>
+    <div class="card stc" id="stcard" hidden>
+      <h2>Andamento vendite</h2>
+      <div class="stk" id="stKpi"></div>
+      <div id="stBar"></div>
+      <h3 style="font:600 .9rem Inter,sans-serif;margin:0 0 8px">Chi vende di più</h3>
+      <div id="stRank"></div>
     </div>
     <div class="card sumcard" id="sumcard">
       <h2>Sacchetti preparati</h2>
@@ -187,6 +209,19 @@ function render(){
   $('kPaid').textContent = eur(sum(paid,'euro'));
   $('kOrd').textContent = O.length;
   $('kKg').textContent = sum(O,'kg') + ' kg';
+  // andamento vendite: solo per i referenti abilitati
+  const st = D.stats;
+  $('stcard').hidden = !st;
+  if (st) {
+    const kgT = n => (+n || 0).toLocaleString('it-IT') + ' kg';
+    $('stKpi').innerHTML = `<div><small>Venduto in totale</small><b>${kgT(st.kg)}</b></div>`
+      + (st.left != null ? `<div><small>Ancora disponibili</small><b>${kgT(st.left)}</b></div>` : `<div><small>Disponibilità</small><b>senza limite</b></div>`);
+    $('stBar').innerHTML = st.limit > 0 ? `<div class="stbar" title="${Math.round(st.kg / st.limit * 100)}% dei ${kgT(st.limit)} disponibili"><i style="width:${Math.min(100, st.kg / st.limit * 100)}%"></i></div>` : '';
+    const mx = Math.max(0, ...st.rank.map(r => r.kg)), me = String(D.nome || '').trim().toLowerCase();
+    $('stRank').innerHTML = st.rank.length ? '<div class="rk">' + st.rank.map(r => { const m = r.nome.trim().toLowerCase() === me ? ' me' : '';
+      return `<div class="nm${m}" title="${esc(r.nome)}">${esc(r.nome)}</div><div class="tr"><div class="b${m}" style="width:${mx ? r.kg / mx * 80 : 0}%"></div><span class="v">${kgT(r.kg)}</span></div>`; }).join('') + '</div>'
+      : '<p class="legend" style="display:block;margin:0">Ancora nessun ordine.</p>';
+  }
   // riepilogo sacchetti (gli ordini già ritirati contano come preparati)
   const qa = {}, ra = {}; SZ.forEach(s=>{ qa[s]=0; ra[s]=0; });
   O.forEach(o=>{ const q=qOf(o), r=rOf(o); SZ.forEach(s=>{ qa[s]+=q[s]; ra[s]+= o.consegnato ? q[s] : r[s]; }); });
