@@ -72,10 +72,10 @@ const settings = async env => settingsFrom(await getProps(env));
 
 async function referenti(env, def) {
   if (def == null) def = (await settings(env)).quota;
-  const { results } = await env.DB.prepare('SELECT code, nome, wa, tk, quota FROM referenti ORDER BY pos, rowid').all();
+  const { results } = await env.DB.prepare('SELECT code, nome, wa, tk, quota, stats FROM referenti ORDER BY pos, rowid').all();
   return results.map(r => {
     const own = r.quota == null ? '' : num_(r.quota);
-    return { code: r.code, nome: r.nome, wa: r.wa, tk: r.tk, quota: own, rate: own === '' ? def : own };
+    return { code: r.code, nome: r.nome, wa: r.wa, tk: r.tk, quota: own, rate: own === '' ? def : own, stats: !!r.stats };
   });
 }
 async function preparatori(env) {
@@ -216,7 +216,16 @@ async function mine(env, tk, anno) {
     .map(o => ({ id: o.id, nome: o.nome, cognome: o.cognome, telefono: o.telefono, q1: o.q1, q3: o.q3, q5: o.q5, q10: o.q10,
       kg: o.kg, euro: o.euro, note: o.note, pagato: o.pagato, consegnato: o.consegnato, data: o.data,
       r1: o.r1, r3: o.r3, r5: o.r5, r10: o.r10, prontoDal: o.prontoDal }));
-  return { ok: true, nome: ref.nome, anno: year, anni: await years(env), orders, rate: ref.rate };
+  const out = { ok: true, nome: ref.nome, anno: year, anni: await years(env), orders, rate: ref.rate };
+  // solo per i referenti abilitati: classifica in kg, totale venduto e kg ancora disponibili
+  if (ref.stats) {
+    const all = await readOrders(env, year), g = {};
+    all.forEach(o => { const k = String(o.contatto || '').trim() || 'Senza contatto'; g[k] = (g[k] || 0) + (+o.kg || 0); });
+    const kg = all.reduce((t, o) => t + (+o.kg || 0), 0), s = await settings(env);
+    out.stats = { rank: Object.entries(g).map(([nome, k]) => ({ nome, kg: k })).sort((a, b) => b.kg - a.kg || a.nome.localeCompare(b.nome)),
+      kg, limit: s.limit, left: s.limit > 0 ? Math.max(0, s.limit - kg) : null };
+  }
+  return out;
 }
 
 async function prep(env, tk, anno) {
@@ -397,6 +406,11 @@ async function refSave(env, d) {
   return { ok: true, code, linked, referenti: await referenti(env) };
 }
 
+async function refStats(env, d) {
+  const r = await env.DB.prepare('UPDATE referenti SET stats = ?1 WHERE code = ?2').bind(d.value ? 1 : 0, String(d.code)).run();
+  if (!r.meta.changes) return { ok: false, error: 'Referente non trovato' };
+  return { ok: true, referenti: await referenti(env) };
+}
 async function refDelete(env, d) {
   await env.DB.prepare('DELETE FROM referenti WHERE code = ?1').bind(String(d.code)).run();
   return { ok: true, referenti: await referenti(env) };
@@ -448,6 +462,7 @@ async function handlePost(env, ctx, request) {
     if (d.action === 'settings') return saveSettings(env, d);
     if (d.action === 'refSave') return refSave(env, d);
     if (d.action === 'refDelete') return refDelete(env, d);
+    if (d.action === 'refStats') return refStats(env, d);
     if (d.action === 'prepSave') return prepSave(env, d);
     if (d.action === 'prepDelete') return prepDelete(env, d);
     if (d.action === 'notifyTest') return sendTelegram(env, 'Castagnacopo: prova', 'Gli avvisi funzionano.');
