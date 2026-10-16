@@ -135,7 +135,9 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
   <div class="card login" id="login">
     <img src="logo.svg" width="80" alt="">
     <h1>Report ordini</h1>
-    <form id="lf"><input id="pw" type="password" placeholder="Password" autocomplete="current-password"><button class="btn" style="width:100%;justify-content:center">Entra</button></form>
+    <form id="lf"><input id="pw" type="password" placeholder="Password" autocomplete="current-password">
+      <input id="otp" inputmode="numeric" autocomplete="one-time-code" placeholder="Codice a 6 cifre (o di emergenza)" maxlength="12" hidden>
+      <button class="btn" style="width:100%;justify-content:center">Entra</button></form>
     <p class="err" id="le"></p>
   </div>
 
@@ -148,6 +150,7 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
         <button class="btn ghost" id="refresh">Aggiorna</button>
         <button class="btn ghost" id="csv">Scarica CSV</button>
         <button class="btn ghost" onclick="print()">Stampa</button>
+        <button class="btn ghost" id="logout">Esci</button>
       </div>
     </div>
 
@@ -317,6 +320,37 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
       </form>
     </div>
 
+    <div class="card mb noprint" id="secCard">
+      <div class="bar"><h2 style="margin:0">Sicurezza dell'accesso</h2><span class="hint">Con la verifica in due passaggi per entrare servono la password e un codice dell'app sul telefono.</span></div>
+      <p id="secSt" style="margin:0 0 10px">Controllo…</p>
+      <div id="secSetup" hidden>
+        <ol class="hint" style="margin:0 0 12px;padding-left:18px;line-height:1.6">
+          <li>Apri sul telefono un'app di autenticazione (Google Authenticator, Authy, Microsoft Authenticator…).</li>
+          <li>Inquadra il codice QR, oppure inserisci a mano la chiave qui sotto.</li>
+          <li>Scrivi il codice di 6 cifre che compare nell'app e premi Conferma.</li>
+        </ol>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+          <div id="secQr" style="background:#fff;padding:10px;border-radius:12px;line-height:0"></div>
+          <div style="min-width:0;flex:1">
+            <p class="hint" style="margin:0 0 4px">Chiave da inserire a mano:</p>
+            <p id="secKey" style="font:600 .95rem ui-monospace,Menlo,monospace;word-break:break-all;margin:0 0 12px"></p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="secCode" inputmode="numeric" maxlength="6" placeholder="123456" style="width:120px"><button class="btn" type="button" id="secConfirm">Conferma</button><button class="btn ghost" type="button" id="secCancel">Annulla</button></div>
+          </div>
+        </div>
+      </div>
+      <div id="secCodes" hidden>
+        <p style="margin:0 0 8px"><b>Codici di emergenza</b>: servono se perdi il telefono. Ognuno vale una volta sola. Salvali adesso (copiali o stampali): non verranno più mostrati.</p>
+        <pre id="secCodeList" style="font:600 1rem ui-monospace,Menlo,monospace;background:var(--bg);padding:12px;border-radius:10px;margin:0 0 10px;columns:2"></pre>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" type="button" id="secCopy">Copia i codici</button><button class="btn" type="button" id="secDone">Li ho salvati</button></div>
+      </div>
+      <div id="secOff" hidden style="margin-bottom:10px"><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="secOffCode" maxlength="12" placeholder="Codice dell'app o di emergenza" style="width:240px"><button class="btn danger" type="button" id="secOffGo">Disattiva</button><button class="btn ghost" type="button" id="secOffCancel">Annulla</button></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap" id="secBtns">
+        <button class="btn" type="button" id="secOn" hidden>Attiva la verifica in due passaggi</button>
+        <button class="btn danger ghost" type="button" id="secOffOpen" hidden>Disattiva la verifica in due passaggi</button>
+        <button class="btn ghost" type="button" id="logoutAll">Esci da tutti i dispositivi</button>
+      </div>
+    </div>
+
     <div class="card mb noprint">
       <div class="bar"><h2 style="margin:0">Avvisi Telegram</h2><span class="hint">Nuovi ordini e ordini annullati arrivano nel gruppo Telegram tramite il bot @castagnacopo_bot.</span></div>
       <p id="tgSt" style="margin:0 0 10px">Controllo il collegamento…</p>
@@ -344,8 +378,8 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;
 const eur = n => (n||0).toLocaleString('it-IT',{style:'currency',currency:'EUR'});
 const fmtD = s => { const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/); return m ? `${m[3]}/${m[2]} ${m[4]}:${m[5]}` : s; };
 const sacchi = o => [1,2,3,5].filter(s=>o['q'+s]).map(s=>`${o['q'+s]}×${s} kg`).join(', ');
-let D = {orders:[],referenti:[],settings:{}}, anno='', sortK='data', sortDir=-1, key='', sel=new Set(), pending=null, rPending=null, editCode='', adoptName='';
-try { key = sessionStorage.getItem('ck') || ''; } catch(e) {}
+let D = {orders:[],referenti:[],settings:{}}, anno='', sortK='data', sortDir=-1, sess='', sel=new Set(), pending=null, rPending=null, editCode='', adoptName='';
+try { sess = localStorage.getItem('cc_sess') || ''; sessionStorage.removeItem('ck'); } catch(e) {}
 
 function toast(t){ const el=$('toast'); el.textContent=t; el.classList.add('on'); clearTimeout(toast.t); toast.t=setTimeout(()=>el.classList.remove('on'),2600); }
 // se il server risponde con un errore invece dei dati, riprova da solo qualche volta
@@ -362,13 +396,15 @@ async function apiFetch(url, opts, tries = 3){
 }
 async function post(body){
   // una sola prova: alcune azioni (aggiungi, cancella) non vanno ripetute due volte
-  const j = await apiFetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({key,anno},body))}, 1);
-  if(!j.ok) throw new Error(j.error||'Errore'); return j;
+  const j = await apiFetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({sessione:sess,anno},body))}, 1);
+  if(!j.ok){ if (j.error==='sessione') { endSession(); throw new Error('Sessione scaduta: entra di nuovo'); } throw new Error(errTxt(j.error)); } return j;
 }
+const errTxt = e => e==='troppi_tentativi' ? 'Troppi tentativi sbagliati: riprova tra 15 minuti.' : e==='codice_richiesto' ? 'Serve il codice a 6 cifre' : (e||'Errore');
+function endSession(){ sess=''; try{ localStorage.removeItem('cc_sess'); }catch(x){} $('app').style.display='none'; $('login').style.display='block'; $('pw').value=''; $('otp').value=''; $('otp').hidden=true; }
 
 async function load(y){
-  const j = await apiFetch(SCRIPT_URL + '?action=report&key=' + encodeURIComponent(key) + (y ? '&anno=' + y : ''));
-  if (!j.ok) throw new Error(j.error || 'Errore');
+  const j = await apiFetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'report', sessione:sess, anno:y||''})});
+  if (!j.ok) { if (j.error==='sessione') endSession(); throw new Error(errTxt(j.error)); }
   D = j; anno = j.anno; sel.clear(); $('confirm').classList.remove('on');
   $('anno').innerHTML = j.anni.map(a => `<option ${a===anno?'selected':''}>${a}</option>`).join('');
   $('annoTit').textContent = anno;
@@ -754,16 +790,62 @@ $('tgTest').onclick = async () => {
 
 /* ----- generale ----- */
 $('lf').onsubmit = async e => {
-  e.preventDefault(); key = $('pw').value; $('le').textContent = 'Verifica…';
-  try { await load(); tgLoad(); try{sessionStorage.setItem('ck',key);}catch(x){} }
+  e.preventDefault(); $('le').textContent = 'Verifica…';
+  try {
+    const j = await apiFetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'login', password:$('pw').value, codice:$('otp').value.trim()})}, 1);
+    if (!j.ok) {
+      if (j.error==='codice_richiesto') { $('otp').hidden=false; $('otp').focus(); $('le').textContent='Scrivi il codice a 6 cifre dell\'app sul telefono.'; return; }
+      $('le').textContent = errTxt(j.error); if (!$('otp').hidden) $('otp').select(); return;
+    }
+    sess = j.sessione; try{ localStorage.setItem('cc_sess', sess); }catch(x){}
+    $('le').textContent=''; $('pw').value=''; $('otp').value='';
+    await load(); tgLoad(); secLoad();
+  }
   catch(x){ $('le').textContent = x.message; }
+};
+$('logout').onclick = async () => { try{ await post({action:'logout'}); }catch(x){} endSession(); };
+$('logoutAll').onclick = async () => { try{ await post({action:'logout_tutti'}); toast('Uscito da tutti i dispositivi'); }catch(x){ toast(x.message); } endSession(); };
+
+/* ----- verifica in due passaggi ----- */
+function secShow(j){
+  const on = !!j.totp;
+  $('secSt').innerHTML = on ? `✅ <b>Verifica in due passaggi attiva.</b> Codici di emergenza rimasti: ${j.emergenza}${j.emergenza<3?' <span class="err">(pochi: disattiva e riattiva per averne di nuovi)</span>':''}`
+    : '⚠️ <b>Verifica in due passaggi non attiva:</b> per entrare basta la password.';
+  $('secOn').hidden = on; $('secOffOpen').hidden = !on;
+}
+async function secLoad(){ try{ secShow(await post({action:'sicurezza'})); }catch(x){ $('secSt').textContent='Stato non disponibile: '+x.message; } }
+function loadQrLib(){ return window.QRCode ? Promise.resolve() : new Promise((ok,no)=>{ const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; sc.onload=ok; sc.onerror=no; document.head.appendChild(sc); }); }
+$('secOn').onclick = async () => {
+  try{
+    const j = await post({action:'admin_2fa_nuovo'});
+    $('secKey').textContent = j.secret.replace(/(.{4})/g,'$1 ').trim(); $('secQr').innerHTML='';
+    try{ await loadQrLib(); new QRCode($('secQr'), {text:j.uri, width:180, height:180, correctLevel:QRCode.CorrectLevel.M}); }
+    catch(x){ $('secQr').innerHTML='<span class="hint" style="line-height:1.4">QR non disponibile: usa la chiave a mano.</span>'; }
+    $('secSetup').hidden=false; $('secBtns').hidden=true; $('secCode').value=''; $('secCode').focus();
+  }catch(x){ toast(x.message); }
+};
+$('secCancel').onclick = () => { $('secSetup').hidden=true; $('secBtns').hidden=false; };
+$('secConfirm').onclick = async () => {
+  const b=$('secConfirm'); b.disabled=true;
+  try{ const j = await post({action:'admin_2fa_attiva', codice:$('secCode').value.trim()});
+    $('secSetup').hidden=true; $('secCodeList').textContent = j.emergenza.join('\n'); $('secCodes').hidden=false; toast('Verifica in due passaggi attivata'); }
+  catch(x){ toast(x.message); $('secCode').select(); }
+  finally{ b.disabled=false; }
+};
+$('secCopy').onclick = () => copy('Castagnacopo – codici di emergenza (validi una volta sola):\n' + $('secCodeList').textContent, 'Codici copiati');
+$('secDone').onclick = () => { $('secCodes').hidden=true; $('secCodeList').textContent=''; $('secBtns').hidden=false; secLoad(); };
+$('secOffOpen').onclick = () => { $('secOff').hidden=false; $('secBtns').hidden=true; $('secOffCode').value=''; $('secOffCode').focus(); };
+$('secOffCancel').onclick = () => { $('secOff').hidden=true; $('secBtns').hidden=false; };
+$('secOffGo').onclick = async () => {
+  try{ await post({action:'admin_2fa_disattiva', codice:$('secOffCode').value.trim()}); $('secOff').hidden=true; $('secBtns').hidden=false; toast('Verifica in due passaggi disattivata'); secLoad(); }
+  catch(x){ toast(x.message); }
 };
 $('refresh').onclick = () => load(anno).catch(x=>toast(x.message));
 $('anno').onchange = e => load(e.target.value).catch(x=>toast(x.message));
 $('q').oninput = render; $('fRef').onchange = render; $('fSt').onchange = render;
 document.querySelector('#tb').closest('table').querySelector('thead').onclick = e => { const k=e.target.dataset.k; if(!k) return; sortDir = sortK===k ? -sortDir : 1; sortK=k; render(); };
 $('csv').onclick = () => csvOf(D.orders, 'castagnacopo-ordini-'+anno+'.csv');
-if (key) load().then(tgLoad).catch(()=>{ $('login').style.display='block'; });
+if (sess) load().then(()=>{ tgLoad(); secLoad(); }).catch(()=>{ $('login').style.display='block'; });
 </script>
 </body>
 </html>
