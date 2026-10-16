@@ -148,11 +148,11 @@ const SCRIPT_URL = 'https://castagnacopo.maurizio-covarelli.workers.dev/api';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const eur = n => (n||0).toLocaleString('it-IT',{style:'currency',currency:'EUR'});
-const sacchi = o => [1,3,5,10].filter(s=>o['q'+s]).map(s=>`${o['q'+s]}×${s} kg`).join(', ');
-const nSacchi = (o,p) => [1,3,5,10].reduce((t,s)=>t+(+o[p+s]||0),0);
-const isFull = o => nSacchi(o,'q')>0 && [1,3,5,10].every(s=>(+o['r'+s]||0)===(+o['q'+s]||0));
+const sacchi = o => [1,2,3,5].filter(s=>o['q'+s]).map(s=>`${o['q'+s]}×${s} kg`).join(', ');
+const nSacchi = (o,p) => [1,2,3,5].reduce((t,s)=>t+(+o[p+s]||0),0);
+const isFull = o => nSacchi(o,'q')>0 && [1,2,3,5].every(s=>(+o['r'+s]||0)===(+o['q'+s]||0));
 const fmtDay = d => { const m=String(d||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1],m[2]-1,+m[3]).toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'}) : ''; };
-const SZ = [1,3,5,10];
+const SZ = [1,2,3,5];
 const cls = (r,q) => !q ? 'c-none' : r>=q ? 'c-ok' : r>0 ? 'c-part' : 'c-todo';
 function prepTable(q, r){   // q, r: {1:n,3:n,5:n,10:n}
   const sizes = SZ.filter(s=>q[s]>0);
