@@ -466,38 +466,47 @@ async function hotp(secret, counter) {
   const bin = ((h[o] & 127) << 24) | (h[o + 1] << 16) | (h[o + 2] << 8) | h[o + 3];
   return String(bin % 1000000).padStart(6, '0');
 }
-async function totpOk(secret, code) {
+// restituisce l'intervallo di 30 s del codice (per non accettarlo due volte), oppure -1
+async function totpStep(secret, code) {
   code = String(code || '').replace(/\D/g, '');
-  if (!secret || code.length !== 6) return false;
+  if (!secret || code.length !== 6) return -1;
   const t = Math.floor(Date.now() / 30000);
-  for (const d of [-1, 0, 1]) if (await hotp(secret, t + d) === code) return true;
-  return false;
+  for (const d of [-1, 0, 1]) if (await hotp(secret, t + d) === code) return t + d;
+  return -1;
 }
-// codice TOTP oppure codice di emergenza (monouso: viene cancellato)
+// codice TOTP oppure codice di emergenza (monouso: viene cancellato). true = valido, 'usato' = TOTP già usato
+const factorErr = r => r === 'usato' ? 'Codice già usato: aspetta il prossimo codice dell\'app' : 'Codice errato';
 async function secondFactorOk(env, p, code) {
-  if (await totpOk(p.totp_secret, code)) return true;
+  const step = await totpStep(p.totp_secret, code);
+  if (step >= 0) {
+    if (step <= (Number(p.totp_last) || 0)) return 'usato';   // codice già usato: non vale due volte
+    await setProp(env, 'totp_last', step);
+    return true;
+  }
   const c = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (c.length < 8) return false;
   const r = await env.DB.prepare('DELETE FROM codici_emergenza WHERE h = ?1').bind(await sha256(c)).run();
   return (r.meta.changes || 0) > 0;
 }
-async function tooManyFails(env) {
-  const r = await env.DB.prepare('SELECT COUNT(*) AS n FROM tentativi WHERE ts > ?1').bind(Date.now() - FAIL_WINDOW).first();
-  return (r && r.n || 0) >= MAX_FAILS;
+// limite per indirizzo (10 errori in 15 minuti) e, come rete di sicurezza, 50 errori in totale
+async function tooManyFails(env, ip) {
+  const r = await env.DB.prepare('SELECT COUNT(*) AS n, SUM(ip = ?2) AS mine FROM tentativi WHERE ts > ?1').bind(Date.now() - FAIL_WINDOW, String(ip || '')).first();
+  return (r && r.mine || 0) >= MAX_FAILS || (r && r.n || 0) >= MAX_FAILS * 5;
 }
-async function fail(env, error) {
-  await env.DB.batch([env.DB.prepare('INSERT INTO tentativi (ts) VALUES (?1)').bind(Date.now()),
+async function fail(env, error, ip) {
+  await env.DB.batch([env.DB.prepare('INSERT INTO tentativi (ts, ip) VALUES (?1, ?2)').bind(Date.now(), String(ip || '')),
     env.DB.prepare('DELETE FROM tentativi WHERE ts < ?1').bind(Date.now() - FAIL_WINDOW)]);
   await sleep(800);
   return { ok: false, error };
 }
 async function login(env, d) {
-  if (await tooManyFails(env)) return { ok: false, error: 'troppi_tentativi', _status: 429 };
-  if (!await checkKey(env, d.password)) return fail(env, 'Password errata');
+  if (await tooManyFails(env, d._ip)) return { ok: false, error: 'troppi_tentativi', _status: 429 };
+  if (!await checkKey(env, d.password)) return fail(env, 'Password errata', d._ip);
   const p = await getProps(env);
   if (p.totp_on === '1') {
     if (!String(d.codice || '').trim()) return { ok: false, error: 'codice_richiesto' };
-    if (!await secondFactorOk(env, p, d.codice)) return fail(env, 'Codice errato');
+    const r = await secondFactorOk(env, p, d.codice);
+    if (r !== true) return fail(env, factorErr(r), d._ip);
   }
   const tok = randHex(24), now = Date.now();
   await env.DB.batch([env.DB.prepare('INSERT INTO sessioni (h, exp) VALUES (?1, ?2)').bind(await sha256(tok), now + SESS_DAYS * 864e5),
@@ -513,8 +522,8 @@ async function adminAuth(env, d) {
   if (d.sessione) return await sessionOk(env, d.sessione) ? null : { ok: false, error: 'sessione' };
   const p = await getProps(env);
   if (p.totp_on === '1') return { ok: false, error: 'sessione' };
-  if (await tooManyFails(env)) return { ok: false, error: 'troppi_tentativi', _status: 429 };
-  return await checkKey(env, d.key) ? null : fail(env, 'Password errata');
+  if (await tooManyFails(env, d._ip)) return { ok: false, error: 'troppi_tentativi', _status: 429 };
+  return await checkKey(env, d.key) ? null : fail(env, 'Password errata', d._ip);
 }
 async function security(env) {
   const p = await getProps(env);
@@ -522,19 +531,25 @@ async function security(env) {
   return { ok: true, totp: p.totp_on === '1', emergenza: r ? r.n : 0 };
 }
 async function tfaNew(env) {
+  if ((await getProps(env)).totp_on === '1') return { ok: false, error: 'La verifica in due passaggi è già attiva: disattivala prima di crearne una nuova' };
   const secret = b32enc(crypto.getRandomValues(new Uint8Array(20)));
   await setProp(env, 'totp_pending', secret);
   return { ok: true, secret, uri: `otpauth://totp/${encodeURIComponent('Castagnacopo:admin')}?secret=${secret}&issuer=Castagnacopo&algorithm=SHA1&digits=6&period=30` };
 }
 async function tfaOn(env, d) {
   const p = await getProps(env);
+  if (p.totp_on === '1') return { ok: false, error: 'La verifica in due passaggi è già attiva' };
   if (!p.totp_pending) return { ok: false, error: 'Genera prima il codice QR' };
-  if (!await totpOk(p.totp_pending, d.codice)) return fail(env, 'Codice errato: controlla l\'ora del telefono e riprova');
+  const step = await totpStep(p.totp_pending, d.codice);
+  if (step < 0) return fail(env, 'Codice errato: controlla l\'ora del telefono e riprova', d._ip);
   const codes = [];
   for (let i = 0; i < 8; i++) { const c = b32enc(crypto.getRandomValues(new Uint8Array(5))); codes.push(c.slice(0, 4) + '-' + c.slice(4, 8)); }
   const st = [env.DB.prepare('DELETE FROM codici_emergenza')];
   for (const c of codes) st.push(env.DB.prepare('INSERT INTO codici_emergenza (h) VALUES (?1)').bind(await sha256(c.replace('-', ''))));
+  // le sessioni aperte con la sola password vengono chiuse, tranne quella attuale
+  st.push(env.DB.prepare('DELETE FROM sessioni WHERE h <> ?1').bind(await sha256(String(d.sessione || ''))));
   await env.DB.batch(st);
+  await setProp(env, 'totp_last', step);
   await setProp(env, 'totp_secret', p.totp_pending);
   await setProp(env, 'totp_on', '1');
   await env.DB.prepare("DELETE FROM settings WHERE key = 'totp_pending'").run();
@@ -543,8 +558,9 @@ async function tfaOn(env, d) {
 async function tfaOff(env, d) {
   const p = await getProps(env);
   if (p.totp_on !== '1') return { ok: true };
-  if (!await secondFactorOk(env, p, d.codice)) return fail(env, 'Codice errato');
-  await env.DB.batch([env.DB.prepare("DELETE FROM settings WHERE key IN ('totp_on','totp_secret','totp_pending')"),
+  const r = await secondFactorOk(env, p, d.codice);
+  if (r !== true) return fail(env, factorErr(r), d._ip);
+  await env.DB.batch([env.DB.prepare("DELETE FROM settings WHERE key IN ('totp_on','totp_secret','totp_pending','totp_last')"),
     env.DB.prepare('DELETE FROM codici_emergenza')]);
   return { ok: true };
 }
@@ -554,14 +570,14 @@ async function logout(env, d, all) {
   return { ok: true };
 }
 
-async function handleGet(env, url) {
-  const p = Object.fromEntries(url.searchParams);
+async function handleGet(env, url, ip) {
+  const p = Object.fromEntries(url.searchParams); p._ip = ip;
   if (p.action === 'info') return info(env);
   if (p.action === 'mine') return mine(env, p.t, p.anno);
   if (p.action === 'prep') return prep(env, p.t, p.anno);
   if (p.action !== 'report') return { ok: true, service: 'castagnacopo' };
   // vecchio accesso con password nell'indirizzo: solo se la verifica in due passaggi è spenta
-  const no = await adminAuth(env, { key: p.key });
+  const no = await adminAuth(env, { key: p.key, _ip: p._ip });
   if (no) return no;
   return report(env, p);
 }
@@ -569,6 +585,8 @@ async function handleGet(env, url) {
 async function handlePost(env, ctx, request) {
   let d;
   try { d = JSON.parse(await request.text() || '{}'); } catch (e) { return { ok: false, error: 'Richiesta non valida' }; }
+  if (!d || typeof d !== 'object') return { ok: false, error: 'Richiesta non valida' };
+  d._ip = request.headers.get('CF-Connecting-IP') || '';
   if (d.action === 'mineFlag') return mineFlag(env, d);
   if (d.action === 'mineDelete') return mineDelete(env, ctx, d);
   if (d.action === 'prepSet') return prepSet(env, d);
@@ -605,7 +623,7 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
     if (url.pathname !== '/' && url.pathname !== '/api') return json({ ok: false, error: 'Non trovato' }, 404);
     try {
-      const out = request.method === 'GET' ? await handleGet(env, url) : request.method === 'POST' ? await handlePost(env, ctx, request) : null;
+      const out = request.method === 'GET' ? await handleGet(env, url, request.headers.get('CF-Connecting-IP') || '') : request.method === 'POST' ? await handlePost(env, ctx, request) : null;
       if (!out) return json({ ok: false, error: 'Metodo non permesso' }, 405);
       const status = out._status || 200; delete out._status;
       return json(out, status);
