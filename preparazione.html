@@ -127,7 +127,7 @@ async function load(anno){
     if(!j.ok) throw new Error(j.error||'Errore');
     D = j;
     $('title').textContent = 'Ciao ' + j.nome.split(' ')[0] + '!';
-    $('sub').textContent = `Sacchetti da preparare per gli ordini del ${j.anno}. Usa + e − oppure "Tutto pronto", poi scegli da quando si può ritirare: i referenti lo vedono subito.`;
+    $('sub').textContent = `Sacchetti da preparare per gli ordini del ${j.anno}. Usa + e − oppure il pulsante "Segna tutto pronto", poi scegli da quando si può ritirare: i referenti lo vedono subito.`;
     if (j.anni && j.anni.length > 1){ $('anno').hidden=false; $('anno').innerHTML = j.anni.map(a=>`<option ${a===j.anno?'selected':''}>${a}</option>`).join(''); }
     $('app').hidden = false; render();
   }catch(e){ $('sub').textContent=''; $('err').hidden=false; $('err').textContent = TK ? e.message : 'Questo link non è completo. Chiedi il tuo link personale a chi organizza.';
@@ -164,37 +164,54 @@ function render(){
       ${o.consegnato ? '' : `<label class="dal ${isFull(o)&&!o.prontoDal?'warn':''}">${isFull(o)&&!o.prontoDal?'Scegli da quando si può ritirare:':'Ritiro da'}
         <input type="date" data-dal value="${esc(o.prontoDal||'')}" aria-label="Data da cui si può ritirare"></label>
       <div class="acts">
-        ${isFull(o) ? `<button class="btn ghost" data-all="0">Rimetti da preparare</button>` : `<button class="btn" data-all="1">✓ Tutto pronto</button>`}
+        ${isFull(o) ? `<button class="btn ghost" data-all="0">Rimetti da preparare</button>` : `<button class="btn" data-all="1">Segna tutto pronto</button>`}
         <span class="saving">${saving[o.id]||''}</span></div>`}
     </div>`).join('') || `<div class="card empty">${D.orders.length ? (filter==='todo' ? 'Tutto preparato, ottimo lavoro!' : 'Nessun ordine in questo elenco.') : 'Ancora nessun ordine.'}</div>`;
 }
 
-function save(o){
-  clearTimeout(timers[o.id]); saving[o.id]='…'; render();
-  timers[o.id] = setTimeout(async ()=>{
-    const r = {}; SZ.forEach(s=>r[s]=+o['r'+s]||0);
-    try{
-      const j = await apiFetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
-        body:JSON.stringify({action:'prepSet', t:TK, anno:D.anno, id:o.id, r, dal:o.prontoDal||''})});
-      if(!j.ok) throw new Error(j.error||'non salvato');
-      SZ.forEach(s=>o['r'+s]=j['r'+s]); o.prontoDal=j.prontoDal; saving[o.id]='Salvato';
-      if (isFull(o)) toast(o.prontoDal ? `${o.nome} ${o.cognome}: pronto, ritiro da ${fmtDay(o.prontoDal)}` : `${o.nome} ${o.cognome}: pronto. Ora scegli la data di ritiro`);
-    }catch(x){ saving[o.id]=''; toast('Non salvato: '+x.message); load(D.anno); return; }
-    render(); setTimeout(()=>{ if(saving[o.id]==='Salvato'){ saving[o.id]=''; render(); } }, 1800);
-  }, 700);
+// salvataggio: subito per "Tutto pronto" e per la data, dopo una breve pausa per + e − (così più tocchi diventano una sola richiesta).
+// Non si ridisegna la pagina mentre si salva, altrimenti un tocco su un pulsante può andare perso.
+const pend = {};
+function mark(o, txt){ saving[o.id] = txt; const el = document.querySelector(`[data-o="${CSS.escape(o.id)}"] .saving`); if (el) el.textContent = txt; }
+function body(o){ const r = {}; SZ.forEach(s=>r[s]=+o['r'+s]||0); return JSON.stringify({action:'prepSet', t:TK, anno:D.anno, id:o.id, r, dal:o.prontoDal||''}); }
+function save(o, wait){
+  clearTimeout(timers[o.id]); pend[o.id] = o; mark(o, 'Salvataggio…');
+  timers[o.id] = setTimeout(()=>send(o), wait ? 600 : 0);
 }
+async function send(o){
+  delete pend[o.id]; clearTimeout(timers[o.id]);
+  try{
+    const j = await apiFetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'}, body:body(o)});
+    if(!j.ok) throw new Error(j.error||'non salvato');
+    SZ.forEach(s=>o['r'+s]=j['r'+s]); o.prontoDal=j.prontoDal; saving[o.id]='Salvato';
+    if (isFull(o)) toast(o.prontoDal ? `${o.nome} ${o.cognome}: pronto, ritiro da ${fmtDay(o.prontoDal)}` : `${o.nome} ${o.cognome}: pronto. Ora scegli la data di ritiro`);
+  }catch(x){ saving[o.id]=''; toast('Non salvato: '+x.message); load(D.anno); return; }
+  safeRender(); setTimeout(()=>{ if(saving[o.id]==='Salvato'){ saving[o.id]=''; safeRender(); } }, 1800);
+}
+// non ridisegnare mentre un dito o il mouse è premuto: il pulsante sotto sparirebbe e il tocco andrebbe perso
+let down = false, later = false;
+document.addEventListener('pointerdown', ()=>{ down = true; }, true);
+document.addEventListener('pointerup', ()=>{ setTimeout(()=>{ down = false; if (later){ later = false; render(); } }, 0); }, true);
+document.addEventListener('pointercancel', ()=>{ down = false; }, true);
+function safeRender(){ if (down) later = true; else render(); }
+// se si chiude la pagina o si passa a un'altra app prima del salvataggio, si manda subito quello che manca
+function flush(){ Object.values(pend).forEach(o=>{ clearTimeout(timers[o.id]); delete pend[o.id];
+  try{ fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body(o),keepalive:true}); }catch(x){} }); }
+addEventListener('pagehide', flush);
+document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState==='hidden') flush(); });
+addEventListener('beforeunload', e => { if (Object.keys(pend).length){ flush(); } });
 
 $('list').onclick = e => {
   const card = e.target.closest('[data-o]'); if(!card) return;
   const o = D.orders.find(x=>x.id===card.dataset.o); if(!o || o.consegnato) return;
   const b = e.target.closest('button'); if(!b) return;
-  if (b.dataset.all){ SZ.forEach(s=>o['r'+s] = b.dataset.all==='1' ? (+o['q'+s]||0) : 0); return save(o); }
-  if (b.dataset.s){ const s=b.dataset.s; o['r'+s] = Math.max(0, Math.min(+o['q'+s]||0, (+o['r'+s]||0) + +b.dataset.d)); save(o); }
+  if (b.dataset.all){ SZ.forEach(s=>o['r'+s] = b.dataset.all==='1' ? (+o['q'+s]||0) : 0); render(); return save(o, false); }
+  if (b.dataset.s){ const s=b.dataset.s; o['r'+s] = Math.max(0, Math.min(+o['q'+s]||0, (+o['r'+s]||0) + +b.dataset.d)); render(); save(o, true); }
 };
 $('list').onchange = e => {
   if (!e.target.matches('[data-dal]')) return;
   const card = e.target.closest('[data-o]'); const o = card && D.orders.find(x=>x.id===card.dataset.o); if(!o) return;
-  o.prontoDal = e.target.value || ''; save(o);
+  o.prontoDal = e.target.value || ''; save(o, false);   // niente ridisegno qui: il tocco successivo (es. "Tutto pronto") non va perso
 };
 document.querySelector('.seg').onclick = e => {
   const b = e.target.closest('button'); if(!b) return;
