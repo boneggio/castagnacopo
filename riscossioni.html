@@ -70,9 +70,22 @@ h1{font-family:Fraunces,Georgia,serif;font-weight:800;color:var(--brand);margin:
 .dates .nd{color:var(--muted);font-weight:500}
 .legend span::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;background:currentColor}
 .bar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:6px 0 10px}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.seg button{border:0;background:transparent;color:var(--ink);padding:8px 12px;font:500 .88rem Inter,sans-serif;cursor:pointer}
+.seg{display:flex;flex-wrap:wrap;flex:1 1 100%;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{flex:1 1 auto;border:0;background:transparent;color:var(--ink);padding:8px 8px;font:500 .86rem Inter,sans-serif;cursor:pointer;white-space:nowrap}
 .seg button.on{background:var(--brand);color:#fff}
+/* riepilogo: solo nome, pagato e consegnato */
+.sum{padding:6px 16px}
+.sum .tot{color:var(--muted);font-size:.85rem;padding:8px 0 6px}
+.sum .tot b{color:var(--ink)}
+.sum .r{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.sum .r.h{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0;border-top:0;padding-bottom:4px}
+.sum .n{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.sum .n small{display:block;font-weight:400;color:var(--muted);font-size:.78rem}
+.sum .c{width:90px;text-align:center}
+.yn{display:inline-block;font-size:.78rem;font-weight:600;padding:3px 9px;border-radius:99px;white-space:nowrap}
+.yn.si{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.yn.no{background:color-mix(in srgb,var(--err) 12%,transparent);color:var(--err)}
+@media (max-width:380px){ .sum .c{width:78px} }
 select{padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit}
 .list{display:grid;gap:10px}
 .o{display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center}
@@ -132,7 +145,7 @@ footer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:24px}
     </div>
     <div class="bar">
       <div class="seg" role="group" aria-label="Filtro">
-        <button class="on" data-f="">Tutti</button><button data-f="np">Da pagare</button><button data-f="nc">Da consegnare</button><button data-f="pr">Pronti</button>
+        <button class="on" data-f="">Tutti</button><button data-f="np">Da pagare</button><button data-f="nc">Da consegnare</button><button data-f="pr">Pronti</button><button data-f="sum">Riepilogo</button>
       </div>
       <select id="anno" aria-label="Anno" hidden></select>
     </div>
@@ -249,6 +262,7 @@ function render(){
     $('kEarn').textContent = eur(sum(O,'kg') * rate);
     $('kEarnPaid').textContent = `di cui sugli ordini già pagati: ${eur(sum(paid,'kg') * rate)}`;
   }
+  if (filter==='sum') return renderSum(O);
   const list = O.filter(o => filter==='np' ? !o.pagato : filter==='nc' ? !o.consegnato : filter==='pr' ? (isFull(o) && !o.consegnato) : true)
     .sort((a,b)=> (a.pagato&&a.consegnato) - (b.pagato&&b.consegnato) || String(a.cognome).localeCompare(String(b.cognome),'it'));
   $('list').innerHTML = list.map(o => `
@@ -266,6 +280,17 @@ function render(){
       ${asking===o.id ? `<div class="ask"><span>Annullare l'ordine di ${esc(o.nome)} ${esc(o.cognome)}? Non si può tornare indietro.</span>
         <span style="display:flex;gap:8px;margin-left:auto"><button class="no" data-no="1">No</button><button class="yes" data-yes="${esc(o.id)}">Sì, annulla</button></span></div>` : ''}
     </div>`).join('') || `<div class="card empty">${O.length ? 'Nessun ordine in questo elenco.' : 'Ancora nessun ordine tramite te.'}</div>`;
+}
+
+// riepilogo in sola lettura: nome e cognome con accanto pagato e consegnato
+function renderSum(O){
+  const yn = v => v ? '<span class="yn si">✓ Sì</span>' : '<span class="yn no">No</span>';
+  const list = [...O].sort((a,b)=> `${a.cognome} ${a.nome}`.localeCompare(`${b.cognome} ${b.nome}`, 'it'));
+  const pag = O.filter(o=>o.pagato).length, con = O.filter(o=>o.consegnato).length;
+  $('list').innerHTML = !O.length ? '<div class="card empty">Ancora nessun ordine tramite te.</div>' : `<div class="card sum">
+    <div class="tot">Pagati <b>${pag} su ${O.length}</b> · Consegnati <b>${con} su ${O.length}</b></div>
+    <div class="r h"><span>Nome</span><span class="c">Pagato</span><span class="c">Consegnato</span></div>
+    ${list.map(o=>`<div class="r"><span class="n">${esc(o.nome)} ${esc(o.cognome)}<small>${o.kg} kg · ${eur(o.euro)}</small></span><span class="c">${yn(o.pagato)}</span><span class="c">${yn(o.consegnato)}</span></div>`).join('')}</div>`;
 }
 
 $('list').onclick = async e => {
