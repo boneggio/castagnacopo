@@ -234,7 +234,7 @@ async function prep(env, tk, anno) {
   const year = isYear(anno) ? anno : thisYear();
   const orders = (await readOrders(env, year)).map(o => ({ id: o.id, nome: o.nome, cognome: o.cognome, contatto: o.contatto, data: o.data,
     q1: o.q1, q2: o.q2, q3: o.q3, q5: o.q5, r1: o.r1, r2: o.r2, r3: o.r3, r5: o.r5, kg: o.kg,
-    prontoDal: o.prontoDal, prepBy: o.prepBy, consegnato: o.consegnato }));
+    prontoDal: o.prontoDal, prepBy: o.prepBy, pagato: o.pagato, consegnato: o.consegnato }));
   return { ok: true, nome: pr.nome, anno: year, anni: await years(env), orders };
 }
 
