@@ -30,8 +30,8 @@ h1{font-family:Fraunces,Georgia,serif;font-weight:800;color:var(--brand);margin:
 .prog{margin-top:10px;font-size:.88rem;color:var(--muted)}
 .prog b{color:var(--ink)}
 .bar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:6px 0 10px}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.seg button{border:0;background:transparent;color:var(--ink);padding:8px 12px;font:500 .88rem Inter,sans-serif;cursor:pointer}
+.seg{display:flex;flex:1 1 100%;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{flex:1 1 auto;border:0;background:transparent;color:var(--ink);padding:8px 6px;font:500 .86rem Inter,sans-serif;cursor:pointer;white-space:nowrap}
 .seg button.on{background:var(--brand);color:#fff}
 select,input{padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;min-width:0}
 #q{flex:1 1 140px}
@@ -73,6 +73,19 @@ select,input{padding:8px 10px;border:1px solid var(--line);border-radius:10px;ba
 .dal.warn input{border-color:var(--err)}
 .empty{text-align:center;color:var(--muted);padding:26px 10px}
 .err{color:var(--err)}
+/* riepilogo: solo nome, pagato e consegnato */
+.sum{padding:6px 16px}
+.sum .tot{color:var(--muted);font-size:.85rem;padding:8px 0 6px}
+.sum .tot b{color:var(--ink)}
+.sum .r{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.sum .r.h{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0;border-top:0;padding-bottom:4px}
+.sum .n{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.sum .n small{display:block;font-weight:400;color:var(--muted);font-size:.78rem}
+.sum .c{width:90px;text-align:center}
+.yn{display:inline-block;font-size:.78rem;font-weight:600;padding:3px 9px;border-radius:99px;white-space:nowrap}
+.yn.si{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.yn.no{background:color-mix(in srgb,var(--err) 12%,transparent);color:var(--err)}
+@media (max-width:380px){ .sum .c{width:78px} }
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.on{opacity:1}
 footer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:24px}
@@ -91,7 +104,7 @@ footer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:24px}
     </div>
     <div class="bar">
       <div class="seg" role="group" aria-label="Filtro">
-        <button class="on" data-f="todo">Da preparare</button><button data-f="full">Pronti</button><button data-f="">Tutti</button>
+        <button class="on" data-f="todo">Da preparare</button><button data-f="full">Pronti</button><button data-f="">Tutti</button><button data-f="sum">Riepilogo</button>
       </div>
       <input id="q" placeholder="Cerca nome…" aria-label="Cerca per nome">
       <select id="anno" aria-label="Anno" hidden></select>
@@ -158,6 +171,7 @@ function render(){
   $('prog').innerHTML = `Ordini pronti: <b>${full} su ${act.length}</b>`;
 
   const f = $('q').value.trim().toLowerCase();
+  if (filter==='sum') return renderSum(f);
   const list = D.orders.filter(o => (filter==='todo' ? (!o.consegnato && !isFull(o)) : filter==='full' ? (isFull(o) || o.consegnato) : true)
       && (!f || `${o.nome} ${o.cognome} ${o.contatto}`.toLowerCase().includes(f)))
     .sort((a,b)=> String(a.data).localeCompare(String(b.data)));
@@ -175,6 +189,19 @@ function render(){
         ${isFull(o) ? `<button class="btn ghost" data-all="0">Rimetti da preparare</button>` : `<button class="btn" data-all="1">Segna tutto pronto</button>`}
         <span class="saving">${saving[o.id]||''}</span></div>`}
     </div>`).join('') || `<div class="card empty">${D.orders.length ? (filter==='todo' ? 'Tutto preparato, ottimo lavoro!' : 'Nessun ordine in questo elenco.') : 'Ancora nessun ordine.'}</div>`;
+}
+
+// riepilogo in sola lettura: nome e cognome con accanto pagato e consegnato (come nel pannello amministratore)
+function renderSum(f){
+  const all = D.orders, yn = v => v ? '<span class="yn si">✓ Sì</span>' : '<span class="yn no">No</span>';
+  const list = all.filter(o => !f || `${o.nome} ${o.cognome} ${o.contatto}`.toLowerCase().includes(f))
+    .sort((a,b)=> `${a.cognome} ${a.nome}`.localeCompare(`${b.cognome} ${b.nome}`, 'it'));
+  const pag = all.filter(o=>o.pagato).length, con = all.filter(o=>o.consegnato).length;
+  $('list').innerHTML = !all.length ? '<div class="card empty">Ancora nessun ordine.</div>' : `<div class="card sum">
+    <div class="tot">Pagati <b>${pag} su ${all.length}</b> · Consegnati <b>${con} su ${all.length}</b></div>
+    <div class="r h"><span>Nome</span><span class="c">Pagato</span><span class="c">Consegnato</span></div>
+    ${list.map(o=>`<div class="r"><span class="n">${esc(o.nome)} ${esc(o.cognome)}<small>${o.kg} kg · tramite ${esc(o.contatto||'—')}</small></span><span class="c">${yn(o.pagato)}</span><span class="c">${yn(o.consegnato)}</span></div>`).join('')
+      || '<div class="empty">Nessun ordine con questo nome.</div>'}</div>`;
 }
 
 // salvataggio: subito per "Tutto pronto" e per la data, dopo una breve pausa per + e − (così più tocchi diventano una sola richiesta).
