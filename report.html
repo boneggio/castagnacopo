@@ -204,7 +204,7 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
       <div class="card">
         <h2>Conti</h2>
         <div class="tw"><table class="conti">
-          <thead><tr><th class="nosort"></th><th class="n nosort">Tutti gli ordini</th><th class="n nosort">Solo pagati</th></tr></thead>
+          <thead><tr><th class="nosort"></th><th class="n nosort">Tutti gli ordini</th><th class="n nosort">Solo pagati</th><th class="n nosort">Regalate</th></tr></thead>
           <tbody id="contiTb"></tbody>
         </table></div>
         <p class="hint" id="contiHint" style="margin-top:8px"></p>
@@ -285,7 +285,7 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
           <th data-k="data">Data</th><th data-k="cognome">Cognome</th><th data-k="nome">Nome</th><th data-k="telefono">Telefono</th><th data-k="contatto">Contatto</th>
           <th class="n" data-k="q1">1 kg</th><th class="n" data-k="q2">2 kg</th><th class="n" data-k="q3">3 kg</th><th class="n" data-k="q5">5 kg</th>
           <th class="n" data-k="kg">Kg</th><th class="n" data-k="euro">Euro</th>
-          <th class="c" data-k="pronti">Pronti</th><th class="c" data-k="pagato">Pagato</th><th class="c" data-k="consegnato">Consegn.</th><th data-k="note">Note</th>
+          <th class="c" data-k="pronti">Pronti</th><th class="c" data-k="consegnato">Consegn.</th><th class="c" data-k="pagato">Pagato</th><th class="c" data-k="regalato">Regalate</th><th data-k="note">Note</th>
         </tr></thead>
         <tbody id="tb"></tbody><tfoot id="tf"></tfoot>
       </table></div>
@@ -405,6 +405,7 @@ function endSession(){ sess=''; try{ localStorage.removeItem('cc_sess'); }catch(
 async function load(y){
   const j = await apiFetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'report', sessione:sess, anno:y||''})});
   if (!j.ok) { if (j.error==='sessione') endSession(); throw new Error(errTxt(j.error)); }
+  j.orders.forEach(norm);
   D = j; anno = j.anno; sel.clear(); $('confirm').classList.remove('on');
   $('anno').innerHTML = j.anni.map(a => `<option ${a===anno?'selected':''}>${a}</option>`).join('');
   $('annoTit').textContent = anno;
@@ -429,9 +430,11 @@ function groups(){
 const num = v => { const n = parseFloat(String(v??'').replace(',','.')); return isFinite(n) && n>=0 ? Math.round(n*100)/100 : NaN; };
 const fmtN = n => n==null || n==='' ? '' : String(n).replace('.',',');
 const rateOf = g => g.ref ? (+g.ref.rate || 0) : 0;          // quota €/kg che vale per il gruppo (0 se scritto a mano)
+// ordine regalato: niente incasso, niente produttore, niente ricarico e niente quota (il valore resta in o._v)
+function norm(o){ if (!o._v) o._v = {euro:o.euro, costo:o.costo, ricarico:o.ricarico}; Object.assign(o, o.regalato ? {euro:0, costo:0, ricarico:0} : o._v); }
 function money(list, rate){
   const s = k => list.reduce((t,o)=>t+(+o[k]||0),0);
-  const kg = s('kg'), ref = Math.round(kg*rate*100)/100;
+  const kg = list.reduce((t,o)=>t+(o.regalato?0:+o.kg||0),0), ref = Math.round(kg*rate*100)/100;
   return { kg, euro:s('euro'), costo:s('costo'), ricarico:s('ricarico'), ref };
 }
 const nS = (o,p) => [1,2,3,5].reduce((t,z)=>t+(+o[p+z]||0),0);
@@ -447,14 +450,14 @@ function summary(g){
   const tot = g.orders.reduce((t,o)=>t+o.euro,0), kg = g.orders.reduce((t,o)=>t+o.kg,0), due = g.orders.filter(o=>!o.pagato).reduce((t,o)=>t+o.euro,0);
   const nome = (g.nome||'').split(' ')[0];
   const righe = g.orders.slice().sort((a,b)=>String(a.cognome).localeCompare(String(b.cognome),'it'))
-    .map(o => `• ${o.nome} ${o.cognome}: ${sacchi(o)} = ${o.kg} kg, ${eur(o.euro)} ${o.pagato?'(pagato)':'(da pagare)'}${o.consegnato?' – consegnato':isFull(o)?' – pronto per il ritiro':''}`);
+    .map(o => `• ${o.nome} ${o.cognome}: ${sacchi(o)} = ${o.kg} kg, ${o.regalato?'nulla da pagare':eur(o.euro)+' '+(o.pagato?'(pagato)':'(da pagare)')}${o.consegnato?' – consegnato':isFull(o)?' – pronto per il ritiro':''}`);
   const rate = rateOf(g), guad = rate ? `\nLa tua quota (${eur(rate)} al kg): ${eur(kg*rate)}` : '';
   return `Ciao ${nome}! Ecco il riepilogo delle castagne Castagnacopo ${anno} ordinate tramite te:\n\n${righe.join('\n') || 'Nessun ordine per ora.'}\n\nTotale: ${kg} kg, ${eur(tot)}\nDa incassare: ${eur(due)}${guad}${g.ref && g.ref.tk ? `\n\nI tuoi ordini (pagamenti, ritiri e sacchetti pronti) li trovi qui:\n${SITE}/riscossioni.html?k=${g.ref.tk}` : ''}\n\nGrazie!`;
 }
 function csvOf(list, name){
-  const cols=['data','cognome','nome','telefono','contatto','q1','q2','q3','q5','kg','euro','costo','ricarico','pagato','consegnato','note'];
-  const head=['Data','Cognome','Nome','Telefono','Contatto','1 kg','2 kg','3 kg','5 kg','Kg','Euro','Costo produttore','Ricarico','Pagato','Consegnato','Note'];
-  const csv=[head].concat(list.map(o=>cols.map(c=>(c==='euro'||c==='costo'||c==='ricarico')?String(o[c]).replace('.',','):(c==='pagato'||c==='consegnato')?(o[c]?'sì':'no'):o[c])))
+  const cols=['data','cognome','nome','telefono','contatto','q1','q2','q3','q5','kg','euro','costo','ricarico','consegnato','pagato','regalato','note'];
+  const head=['Data','Cognome','Nome','Telefono','Contatto','1 kg','2 kg','3 kg','5 kg','Kg','Euro','Costo produttore','Ricarico','Consegnato','Pagato','Regalato','Note'];
+  const csv=[head].concat(list.map(o=>cols.map(c=>(c==='euro'||c==='costo'||c==='ricarico')?String(o[c]).replace('.',','):(c==='pagato'||c==='consegnato'||c==='regalato')?(o[c]?'sì':'no'):o[c])))
     .map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\n');
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv'})); a.download=name; a.click();
 }
@@ -462,7 +465,7 @@ function csvOf(list, name){
 function filtered(){
   const f = $('q').value.trim().toLowerCase(), fr = $('fRef').value, st = $('fSt').value;
   return D.orders.filter(o => (!f || [o.nome,o.cognome,o.telefono,o.contatto].join(' ').toLowerCase().includes(f))
-      && (!fr || groupKey(o)===fr) && (st!=='np' || !o.pagato) && (st!=='nc' || !o.consegnato) && (st!=='np2' || (!isFull(o) && !o.consegnato)) && (st!=='pr' || (isFull(o) && !o.consegnato)))
+      && (!fr || groupKey(o)===fr) && (st!=='np' || (!o.pagato && !o.regalato)) && (st!=='nc' || !o.consegnato) && (st!=='np2' || (!isFull(o) && !o.consegnato)) && (st!=='pr' || (isFull(o) && !o.consegnato)))
     .sort((a,b)=>{const x=sortK==='pronti'?nS(a,'r')/Math.max(1,nS(a,'q')):a[sortK],y=sortK==='pronti'?nS(b,'r')/Math.max(1,nS(b,'q')):b[sortK];return (typeof x==='number'||typeof x==='boolean'?(+x)-(+y):String(x??'').localeCompare(String(y??''),'it'))*sortDir;});
 }
 
@@ -507,15 +510,17 @@ function render(){
     G.forEach(g => { const m = money(paidOnly ? g.orders.filter(o=>o.pagato) : g.orders, rateOf(g)); ['euro','costo','ricarico','ref'].forEach(k=>t[k]+=m[k]); });
     t.net = t.ricarico - t.ref; return t;
   };
-  const A = tot(false), P = tot(true);
-  const row = (lbl, k, cls='') => `<tr class="${cls}"><td>${lbl}</td><td class="n ${A[k]<0?'neg':''}">${eur(A[k])}</td><td class="n ${P[k]<0?'neg':''}">${eur(P[k])}</td></tr>`;
+  const A = tot(false), P = tot(true), RG = O.filter(o=>o.regalato);
+  const R = {euro:0,costo:0,ricarico:0}; RG.forEach(o=>['euro','costo','ricarico'].forEach(k=>R[k]+=+o._v[k]||0));
+  const row = (lbl, k, cls='') => `<tr class="${cls}"><td>${lbl}</td><td class="n ${A[k]<0?'neg':''}">${eur(A[k])}</td><td class="n ${P[k]<0?'neg':''}">${eur(P[k])}</td><td class="n gift">${k in R && RG.length ? eur(R[k]) : '—'}</td></tr>`;
   const subs = G.filter(g => g.ref && g.orders.length).map(g => {
     const r = rateOf(g), a = money(g.orders, r), p = money(g.orders.filter(o=>o.pagato), r);
-    return `<tr class="sub"><td>${esc(g.nome)}<small>${a.kg} kg × ${eur(r)}</small></td><td class="n">${eur(a.ref)}</td><td class="n">${eur(p.ref)}</td></tr>`;
+    return `<tr class="sub"><td>${esc(g.nome)}<small>${a.kg} kg × ${eur(r)}</small></td><td class="n">${eur(a.ref)}</td><td class="n">${eur(p.ref)}</td><td class="n gift">—</td></tr>`;
   }).join('');
   $('contiTb').innerHTML = row('Incasso dai clienti','euro') + row('Da dare al produttore','costo') + row('Ricarico totale','ricarico')
     + row('Quote ai referenti','ref') + subs + row('Tuo guadagno netto','net','net');
-  $('contiHint').textContent = 'Guadagno netto = ricarico − quote ai referenti. Gli ordini con il contatto scritto a mano non hanno quota.';
+  $('contiHint').textContent = 'Guadagno netto = ricarico − quote ai referenti. Gli ordini con il contatto scritto a mano non hanno quota.'
+    + (RG.length ? ` Regalate: ${RG.length} ${RG.length===1?'ordine':'ordini'} (${RG.reduce((t,o)=>t+(+o.kg||0),0)} kg); il loro valore è già tolto da incasso, produttore e ricarico.` : ' Regalate: nessun ordine regalato.');
 
   // referenti
   $('refTb').innerHTML = G.map(g => {
@@ -551,16 +556,17 @@ function render(){
 
   // ordini
   const list = filtered();
-  $('tb').innerHTML = list.map(o=>`<tr class="${sel.has(o.id)?'sel':''} ${o.pagato&&o.consegnato?'done':''}"><td class="noprint"><input type="checkbox" data-id="${esc(o.id)}" ${sel.has(o.id)?'checked':''} aria-label="Seleziona ${esc(o.nome)} ${esc(o.cognome)}"></td>
+  $('tb').innerHTML = list.map(o=>`<tr class="${sel.has(o.id)?'sel':''} ${(o.pagato||o.regalato)&&o.consegnato?'done':''}"><td class="noprint"><input type="checkbox" data-id="${esc(o.id)}" ${sel.has(o.id)?'checked':''} aria-label="Seleziona ${esc(o.nome)} ${esc(o.cognome)}"></td>
     <td>${esc(fmtD(o.data))}</td><td>${esc(o.cognome)}</td><td>${esc(o.nome)}</td><td>${esc(o.telefono)}</td><td>${esc(o.contatto)}</td>
     <td class="n">${o.q1||''}</td><td class="n">${o.q2||''}</td><td class="n">${o.q3||''}</td><td class="n">${o.q5||''}</td>
-    <td class="n"><b>${o.kg}</b></td><td class="n">${eur(o.euro)}</td>
+    <td class="n"><b>${o.kg}</b></td><td class="n">${o.regalato ? `<s class="muted" title="Regalato">${eur(o._v.euro)}</s>` : eur(o.euro)}</td>
     <td class="c">${prBadge(o)}</td>
-    <td class="c"><input type="checkbox" data-f="pagato" data-id="${esc(o.id)}" ${o.pagato?'checked':''} aria-label="Pagato"></td>
     <td class="c"><input type="checkbox" data-f="consegnato" data-id="${esc(o.id)}" ${o.consegnato?'checked':''} aria-label="Consegnato"></td>
-    <td class="note">${esc(o.note)}</td></tr>`).join('') || '<tr><td colspan="16" class="muted">Nessun ordine.</td></tr>';
+    <td class="c"><input type="checkbox" data-f="pagato" data-id="${esc(o.id)}" ${o.pagato?'checked':''} aria-label="Pagato"></td>
+    <td class="c"><input type="checkbox" data-f="regalato" data-id="${esc(o.id)}" ${o.regalato?'checked':''} aria-label="Regalato"></td>
+    <td class="note">${esc(o.note)}</td></tr>`).join('') || '<tr><td colspan="17" class="muted">Nessun ordine.</td></tr>';
   const fl = $('q').value.trim() || $('fRef').value || $('fSt').value;
-  $('tf').innerHTML = `<tr><td class="noprint"></td><td colspan="5">Totale${fl?' (filtrato)':''}</td><td class="n">${sum('q1',list)}</td><td class="n">${sum('q2',list)}</td><td class="n">${sum('q3',list)}</td><td class="n">${sum('q5',list)}</td><td class="n">${sum('kg',list)}</td><td class="n">${eur(sum('euro',list))}</td><td class="c">${list.filter(isFull).length}</td><td class="c">${list.filter(o=>o.pagato).length}</td><td class="c">${list.filter(o=>o.consegnato).length}</td><td></td></tr>`;
+  $('tf').innerHTML = `<tr><td class="noprint"></td><td colspan="5">Totale${fl?' (filtrato)':''}</td><td class="n">${sum('q1',list)}</td><td class="n">${sum('q2',list)}</td><td class="n">${sum('q3',list)}</td><td class="n">${sum('q5',list)}</td><td class="n">${sum('kg',list)}</td><td class="n">${eur(sum('euro',list))}</td><td class="c">${list.filter(isFull).length}</td><td class="c">${list.filter(o=>o.consegnato).length}</td><td class="c">${list.filter(o=>o.pagato).length}</td><td class="c">${list.filter(o=>o.regalato).length}</td><td></td></tr>`;
   $('all').checked = list.length>0 && list.every(o=>sel.has(o.id));
   ['mkPaid','mkDel','delSel'].forEach(id=>$(id).disabled = sel.size===0);
   $('selInfo').textContent = sel.size ? `${sel.size} selezionat${sel.size===1?'o':'i'}` : 'Seleziona uno o più ordini per le azioni';
@@ -569,7 +575,7 @@ function render(){
 
 /* ----- azioni ordini ----- */
 async function setFlag(ids, field, value){
-  ids.forEach(id => { const o = D.orders.find(x=>x.id===id); if(o) o[field]=value; }); render();
+  ids.forEach(id => { const o = D.orders.find(x=>x.id===id); if(o){ o[field]=value; norm(o); } }); render();
   try { await post({action:'flag', ids, field, value}); toast(ids.length===1 ? 'Salvato' : ids.length+' ordini aggiornati'); }
   catch(x){ toast('Non salvato: '+x.message); load(anno); }
 }
