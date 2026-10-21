@@ -289,8 +289,8 @@ function renderSum(O){
   const pag = O.filter(o=>o.pagato).length, con = O.filter(o=>o.consegnato).length;
   $('list').innerHTML = !O.length ? '<div class="card empty">Ancora nessun ordine tramite te.</div>' : `<div class="card sum">
     <div class="tot">Pagati <b>${pag} su ${O.length}</b> · Consegnati <b>${con} su ${O.length}</b></div>
-    <div class="r h"><span>Nome</span><span class="c">Pagato</span><span class="c">Consegnato</span></div>
-    ${list.map(o=>`<div class="r"><span class="n">${esc(o.nome)} ${esc(o.cognome)}<small>${o.kg} kg · ${eur(o.euro)}</small></span><span class="c">${yn(o.pagato)}</span><span class="c">${yn(o.consegnato)}</span></div>`).join('')}</div>`;
+    <div class="r h"><span>Nome</span><span class="c">Consegnato</span><span class="c">Pagato</span></div>
+    ${list.map(o=>`<div class="r"><span class="n">${esc(o.nome)} ${esc(o.cognome)}<small>${o.kg} kg · ${eur(o.euro)}</small></span><span class="c">${yn(o.consegnato)}</span><span class="c">${yn(o.pagato)}</span></div>`).join('')}</div>`;
 }
 
 $('list').onclick = async e => {
