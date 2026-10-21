@@ -98,7 +98,7 @@ async function prepByToken(env, tk) {
 const toOrder = r => ({
   id: r.id, data: r.data, nome: r.nome, cognome: r.cognome, telefono: r.telefono, ref: r.ref, contatto: r.contatto,
   q1: r.q1, q2: r.q2, q3: r.q3, q5: r.q5, kg: r.kg, euro: r.euro, note: r.note,
-  pagato: !!r.pagato, consegnato: !!r.consegnato, costo: r.costo, ricarico: r.ricarico,
+  pagato: !!r.pagato, consegnato: !!r.consegnato, regalato: !!r.regalato, costo: r.costo, ricarico: r.ricarico,
   r1: r.r1, r2: r.r2, r3: r.r3, r5: r.r5, prontoDal: r.pronto_dal, prepBy: r.prep_by
 });
 async function readOrders(env, year) {
@@ -214,7 +214,7 @@ async function mine(env, tk, anno) {
   const year = isYear(anno) ? anno : thisYear();
   const orders = ordersOfRef(await readOrders(env, year), ref)
     .map(o => ({ id: o.id, nome: o.nome, cognome: o.cognome, telefono: o.telefono, q1: o.q1, q2: o.q2, q3: o.q3, q5: o.q5,
-      kg: o.kg, euro: o.euro, note: o.note, pagato: o.pagato, consegnato: o.consegnato, data: o.data,
+      kg: o.kg, euro: o.regalato ? 0 : o.euro, note: o.note, pagato: o.pagato, consegnato: o.consegnato, data: o.data,
       r1: o.r1, r2: o.r2, r3: o.r3, r5: o.r5, prontoDal: o.prontoDal }));
   const out = { ok: true, nome: ref.nome, anno: year, anni: await years(env), orders, rate: ref.rate };
   // solo per i referenti abilitati: classifica in kg, totale venduto e kg ancora disponibili
@@ -234,7 +234,7 @@ async function prep(env, tk, anno) {
   const year = isYear(anno) ? anno : thisYear();
   const orders = (await readOrders(env, year)).map(o => ({ id: o.id, nome: o.nome, cognome: o.cognome, contatto: o.contatto, data: o.data,
     q1: o.q1, q2: o.q2, q3: o.q3, q5: o.q5, r1: o.r1, r2: o.r2, r3: o.r3, r5: o.r5, kg: o.kg,
-    prontoDal: o.prontoDal, prepBy: o.prepBy, pagato: o.pagato, consegnato: o.consegnato }));
+    prontoDal: o.prontoDal, prepBy: o.prepBy, pagato: o.pagato, consegnato: o.consegnato, regalato: o.regalato }));
   return { ok: true, nome: pr.nome, anno: year, anni: await years(env), orders };
 }
 
@@ -306,7 +306,7 @@ async function remove(env, d) {
 }
 
 async function flag(env, d) {
-  const col = d.field === 'pagato' ? 'pagato' : d.field === 'consegnato' ? 'consegnato' : '';
+  const col = ['pagato', 'consegnato', 'regalato'].includes(d.field) ? d.field : '';
   if (!col) return { ok: false, error: 'Campo non valido' };
   const ids = (d.ids || []).map(String);
   if (!ids.length) return { ok: true, updated: 0 };
@@ -321,6 +321,7 @@ async function mineFlag(env, d) {
   const year = isYear(d.anno) ? String(d.anno) : thisYear();
   const allowed = ordersOfRef(await readOrders(env, year), ref).map(o => o.id);
   const ids = (d.ids || []).map(String).filter(id => allowed.includes(id));
+  if (d.field !== 'pagato' && d.field !== 'consegnato') return { ok: false, error: 'Campo non valido' };   // i referenti non segnano i regali
   return flag(env, { anno: year, ids, field: d.field, value: d.value });
 }
 
@@ -340,6 +341,14 @@ async function mineDelete(env, ctx, d) {
   return res;
 }
 
+// il preparatore può segnare un ordine come regalato
+async function prepGift(env, d) {
+  const pr = await prepByToken(env, d.t);
+  if (!pr) return { ok: false, error: 'Link non valido' };
+  const year = isYear(d.anno) ? String(d.anno) : thisYear();
+  const r = await env.DB.prepare('UPDATE ordini SET regalato = ?1 WHERE anno = ?2 AND id = ?3').bind(d.value === true ? 1 : 0, year, String(d.id)).run();
+  return (r.meta.changes || 0) ? { ok: true, regalato: d.value === true } : { ok: false, error: 'Ordine non trovato' };
+}
 async function prepSet(env, d) {
   const pr = await prepByToken(env, d.t);
   if (!pr) return { ok: false, error: 'Link non valido' };
@@ -590,6 +599,7 @@ async function handlePost(env, ctx, request) {
   if (d.action === 'mineFlag') return mineFlag(env, d);
   if (d.action === 'mineDelete') return mineDelete(env, ctx, d);
   if (d.action === 'prepSet') return prepSet(env, d);
+  if (d.action === 'prepGift') return prepGift(env, d);
   if (d.action === 'login') return login(env, d);
   if (d.action === 'logout') return logout(env, d, false);
   if (d.action) {
