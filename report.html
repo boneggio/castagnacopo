@@ -295,9 +295,10 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
       <div class="bar"><h2 style="margin:0">Referenti</h2><span class="hint">Il link personale compila da solo il contatto. Il riepilogo si apre in WhatsApp già scritto.</span></div>
       <div class="confirm noprint" id="rconfirm"><span id="rconfirmTxt"></span><span style="display:flex;gap:8px"><button class="btn ghost" id="rNo">Annulla</button><button class="btn danger" id="rYes">Sì, elimina</button></span></div>
       <div class="tw"><table>
-        <thead><tr><th class="nosort">Referente</th><th class="nosort">WhatsApp</th><th class="n nosort">Ordini</th><th class="n nosort">Kg</th><th class="n nosort">Euro</th><th class="n nosort">Da incassare</th><th class="n nosort">Quota €/kg</th><th class="n nosort">Sua quota</th><th class="n nosort">Su pagati</th><th class="nosort noprint">Azioni</th></tr></thead>
-        <tbody id="refTb"></tbody>
+        <thead><tr><th class="nosort">Referente</th><th class="nosort">WhatsApp</th><th class="n nosort">Ordini</th><th class="n nosort">Kg</th><th class="n nosort">Euro</th><th class="n nosort">Incassato</th><th class="n nosort">Da incassare</th><th class="n nosort">Quota €/kg</th><th class="n nosort">Sua quota</th><th class="n nosort">Su pagati</th><th class="n nosort" title="Incassato meno la sua quota sugli ordini pagati">Ti deve</th><th class="nosort noprint">Azioni</th></tr></thead>
+        <tbody id="refTb"></tbody><tfoot id="refTf"></tfoot>
       </table></div>
+      <p class="hint" style="margin-top:6px">Incassato = ordini segnati come pagati. Ti deve = incassato meno la sua quota sugli ordini pagati (non tiene conto dei soldi che ti ha già dato).</p>
       <form class="refform noprint" id="rf">
         <input id="rfNome" placeholder="Nome del referente (es. Mario)" maxlength="60" aria-label="Nome del referente">
         <input id="rfWa" type="tel" placeholder="WhatsApp (es. 333 1234567)" maxlength="20" aria-label="Numero WhatsApp">
@@ -526,6 +527,7 @@ function render(){
   $('refTb').innerHTML = G.map(g => {
     const kg = sum('kg', g.orders), tot = sum('euro', g.orders), due = g.orders.filter(o=>!o.pagato).reduce((t,o)=>t+o.euro,0);
     const rate = rateOf(g), qAll = money(g.orders, rate).ref, qPaid = money(g.orders.filter(o=>o.pagato), rate).ref;
+    const inc = tot - due, owe = Math.round((inc - (g.ref ? qPaid : 0))*100)/100;   // soldi già presi dai clienti, meno la sua quota
     const rateTxt = g.ref ? `${eur(rate)}${g.ref.quota!==''?'<span class="tag">personale</span>':''}` : '<span class="muted">—</span>';
     const wa = g.ref && waNumber(g.ref.wa);
     const acts = g.ref
@@ -540,9 +542,12 @@ function render(){
          <button class="btn sm ghost" data-a="csv" data-k="${esc(g.key)}">CSV</button>
          <button class="btn sm ghost" data-a="adopt" data-k="${esc(g.key)}">Aggiungi come referente</button>`;
     return `<tr><td><b>${esc(g.nome)}</b>${g.ref?(g.ref.stats?'<span class="tag">vede classifica</span>':''):'<span class="tag">scritto a mano</span>'}</td><td>${g.ref ? esc(g.ref.wa)||'<span class="muted">—</span>' : '<span class="muted">—</span>'}</td>
-      <td class="n">${g.orders.length}</td><td class="n">${kg}</td><td class="n">${eur(tot)}</td><td class="n">${due?eur(due):'—'}</td>
-      <td class="n">${rateTxt}</td><td class="n">${g.ref?eur(qAll):'—'}</td><td class="n">${g.ref?eur(qPaid):'—'}</td><td class="noprint"><div class="acts">${acts}</div></td></tr>`;
-  }).join('') || '<tr><td colspan="10" class="muted">Nessun referente. Aggiungine uno qui sotto.</td></tr>';
+      <td class="n">${g.orders.length}</td><td class="n">${kg}</td><td class="n">${eur(tot)}</td><td class="n">${inc?eur(inc):'—'}</td><td class="n">${due?eur(due):'—'}</td>
+      <td class="n">${rateTxt}</td><td class="n">${g.ref?eur(qAll):'—'}</td><td class="n">${g.ref?eur(qPaid):'—'}</td><td class="n"><b>${owe?eur(owe):'—'}</b></td><td class="noprint"><div class="acts">${acts}</div></td></tr>`;
+  }).join('') || '<tr><td colspan="12" class="muted">Nessun referente. Aggiungine uno qui sotto.</td></tr>';
+  { const all = G.reduce((t,g)=>{ const tt=sum('euro',g.orders), d=g.orders.filter(o=>!o.pagato).reduce((x,o)=>x+o.euro,0), qp=g.ref?money(g.orders.filter(o=>o.pagato), rateOf(g)).ref:0;
+      t.inc+=tt-d; t.due+=d; t.owe+=tt-d-qp; return t; }, {inc:0,due:0,owe:0});
+    $('refTf').innerHTML = G.length ? `<tr><td colspan="4">Totale</td><td class="n">${eur(sum('euro'))}</td><td class="n">${eur(all.inc)}</td><td class="n">${eur(all.due)}</td><td></td><td></td><td></td><td class="n"><b>${eur(all.owe)}</b></td><td class="noprint"></td></tr>` : ''; }
   const cur = $('fRef').value;
   $('fRef').innerHTML = '<option value="">Tutti i referenti</option>' + G.filter(g=>g.orders.length).map(g=>`<option value="${esc(g.key)}" ${g.key===cur?'selected':''}>${esc(g.nome)}</option>`).join('');
 
