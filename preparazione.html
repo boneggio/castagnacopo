@@ -267,7 +267,7 @@ $('list').addEventListener('change', e => dalEvent(e, false));
 $('list').addEventListener('change', async e => {
   if (!e.target.matches('[data-gift]')) return;
   const card = e.target.closest('[data-o]'); const o = card && D.orders.find(x=>x.id===card.dataset.o); if(!o) return;
-  const v = e.target.checked; o.regalato = v; mark(o, 'Salvataggio…');
+  const v = e.target.checked; o.regalato = v; if (v) o.pagato = false; mark(o, 'Salvataggio…');
   try{
     const j = await apiFetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({action:'prepGift', t:TK, anno:D.anno, id:o.id, value:v})});
     if(!j.ok) throw new Error(j.error||'non salvato');
