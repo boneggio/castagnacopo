@@ -311,7 +311,9 @@ async function flag(env, d) {
   const ids = (d.ids || []).map(String);
   if (!ids.length) return { ok: true, updated: 0 };
   const v = d.value === true ? 1 : 0;
-  const rs = await env.DB.batch(ids.map(id => env.DB.prepare(`UPDATE ordini SET ${col} = ?1 WHERE anno = ?2 AND id = ?3`).bind(v, String(d.anno), id)));
+  // pagato e regalato si escludono: un ordine regalato non è pagato, e viceversa
+  const other = v && col === 'regalato' ? ', pagato = 0' : v && col === 'pagato' ? ', regalato = 0' : '';
+  const rs = await env.DB.batch(ids.map(id => env.DB.prepare(`UPDATE ordini SET ${col} = ?1${other} WHERE anno = ?2 AND id = ?3`).bind(v, String(d.anno), id)));
   return { ok: true, updated: rs.reduce((t, r) => t + (r.meta.changes || 0), 0) };
 }
 
@@ -319,7 +321,8 @@ async function mineFlag(env, d) {
   const ref = await refByToken(env, d.t);
   if (!ref) return { ok: false, error: 'Link non valido' };
   const year = isYear(d.anno) ? String(d.anno) : thisYear();
-  const allowed = ordersOfRef(await readOrders(env, year), ref).map(o => o.id);
+  // gli ordini regalati non si segnano come pagati dalla pagina del referente
+  const allowed = ordersOfRef(await readOrders(env, year), ref).filter(o => !(d.field === 'pagato' && o.regalato)).map(o => o.id);
   const ids = (d.ids || []).map(String).filter(id => allowed.includes(id));
   if (d.field !== 'pagato' && d.field !== 'consegnato') return { ok: false, error: 'Campo non valido' };   // i referenti non segnano i regali
   return flag(env, { anno: year, ids, field: d.field, value: d.value });
@@ -346,7 +349,7 @@ async function prepGift(env, d) {
   const pr = await prepByToken(env, d.t);
   if (!pr) return { ok: false, error: 'Link non valido' };
   const year = isYear(d.anno) ? String(d.anno) : thisYear();
-  const r = await env.DB.prepare('UPDATE ordini SET regalato = ?1 WHERE anno = ?2 AND id = ?3').bind(d.value === true ? 1 : 0, year, String(d.id)).run();
+  const r = await env.DB.prepare(`UPDATE ordini SET regalato = ?1${d.value === true ? ', pagato = 0' : ''} WHERE anno = ?2 AND id = ?3`).bind(d.value === true ? 1 : 0, year, String(d.id)).run();
   return (r.meta.changes || 0) ? { ok: true, regalato: d.value === true } : { ok: false, error: 'Ordine non trovato' };
 }
 async function prepSet(env, d) {
