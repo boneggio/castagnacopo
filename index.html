@@ -16,6 +16,7 @@
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -96,6 +97,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--accent);outline-
 .total span:last-child{font-family:Fraunces,Georgia,serif;font-size:1.6rem;font-weight:800;color:var(--brand)}
 .btn{width:100%;padding:15px;border:0;border-radius:14px;background:linear-gradient(180deg,var(--brand-2),var(--brand));color:#fff;font:600 1.05rem Inter,sans-serif;cursor:pointer;box-shadow:0 8px 20px -10px var(--brand)}
 .btn:disabled{opacity:.55;cursor:default}
+@media (prefers-color-scheme:dark){.btn,h2 .n{color:#1b140f}}
 .msg{margin-top:12px;padding:12px;border-radius:10px;display:none}
 .msg.err{display:block;background:color-mix(in srgb,var(--err) 12%,transparent);color:var(--err)}
 .done{text-align:center;display:none}
