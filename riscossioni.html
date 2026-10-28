@@ -8,6 +8,8 @@
 <title>Castagnacopo – I miei ordini</title>
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#f7f1e8;--card:#fffdf9;--ink:#2b1d14;--muted:#7a6656;--line:#e6d9c8;--brand:#7b3f1d;--accent:#c98a3c;--ok:#3f7a3a;--err:#a8322a}
@@ -26,6 +28,7 @@ h1{font-family:Fraunces,Georgia,serif;font-weight:800;color:var(--brand);margin:
 .kpi b{font-family:Fraunces,Georgia,serif;font-size:1.5rem;line-height:1.15;font-variant-numeric:tabular-nums}
 .kpi.due{background:var(--brand);border-color:transparent;color:#fff}
 .kpi.due small{color:#f3dcc7}
+@media (prefers-color-scheme:dark){:root .kpi.due,:root .seg button.on,:root .ask .yes,:root .chip.on .dot{color:#1b140f}.kpi.due small{color:#3a2414}}
 .kpi.earn{grid-column:1/-1;border-color:color-mix(in srgb,var(--ok) 45%,var(--line))}
 .kpi.earn b{color:var(--ok)}
 .kpi .det{color:var(--muted);font-size:.85rem}
@@ -40,8 +43,9 @@ h1{font-family:Fraunces,Georgia,serif;font-weight:800;color:var(--brand);margin:
 .pt th:first-child,.pt td:first-child{text-align:left;color:var(--muted);font-weight:500;white-space:nowrap}
 .pt td{font-weight:600}
 .pt tr+tr td{border-top:1px solid var(--line)}
-.pt .c-ok{color:var(--ok)} .pt .c-part{color:#c9731a} .pt .c-todo{color:var(--err)} .pt .c-none{color:var(--muted);font-weight:400}
-@media (prefers-color-scheme:dark){.pt .c-part{color:#f0a24a}}
+.pt .c-ok{color:var(--ok)} .pt .c-part{color:#a35a12} .pt .c-todo{color:var(--err)} .pt .c-none{color:var(--muted);font-weight:400}
+@media (prefers-color-scheme:dark){.pt .c-part,.c-part2{color:#f0a24a!important}}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .stc{margin-bottom:14px}
 .stc h2{font-family:Fraunces,Georgia,serif;font-size:1.05rem;margin:0 0 10px}
 .stk{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
@@ -89,7 +93,7 @@ h1{font-family:Fraunces,Georgia,serif;font-weight:800;color:var(--brand);margin:
 select{padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit}
 .list{display:grid;gap:10px}
 .o{display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center}
-.o.done{opacity:.6}
+.o.done{background:color-mix(in srgb,var(--card) 55%,var(--bg))}
 .o h3{margin:0;font-size:1.02rem}
 .o .det{color:var(--muted);font-size:.86rem}
 .o .eur{font-family:Fraunces,Georgia,serif;font-weight:800;font-size:1.2rem;text-align:right;font-variant-numeric:tabular-nums}
@@ -97,7 +101,7 @@ select{padding:8px 10px;border:1px solid var(--line);border-radius:10px;backgrou
 .flags{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:99px;border:1.5px solid var(--line);background:transparent;color:var(--ink);font:600 .85rem Inter,sans-serif;cursor:pointer}
 .chip .dot{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;display:inline-grid;place-items:center;font-size:.7rem;line-height:1}
-.chip.on{border-color:var(--ok);color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,transparent)}
+.chip.on{border-color:color-mix(in srgb,var(--ok) 75%,var(--ink));color:color-mix(in srgb,var(--ok) 75%,var(--ink));background:color-mix(in srgb,var(--ok) 12%,transparent)}
 .chip.on .dot{background:var(--ok);border-color:var(--ok);color:#fff}
 .chip:disabled{opacity:.5}
 .cancel{margin-left:auto;border:0;background:transparent;color:var(--err);font:600 .82rem Inter,sans-serif;cursor:pointer;padding:8px 4px;text-decoration:underline}
@@ -114,7 +118,7 @@ footer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:24px}
 </style>
 </head>
 <body>
-<div class="wrap">
+<main class="wrap">
   <header><img src="logo.svg" alt=""><div><h1 id="title">I miei ordini</h1></div></header>
   <p class="sub" id="sub">Caricamento…</p>
 
@@ -136,7 +140,7 @@ footer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:24px}
     <div class="card sumcard" id="sumcard">
       <h2>Sacchetti preparati</h2>
       <div id="sumTab"></div>
-      <div class="legend"><span style="color:var(--ok)">tutti pronti</span><span style="color:#c9731a">in parte</span><span style="color:var(--err)">da preparare</span></div>
+      <div class="legend"><span style="color:var(--ok)">tutti pronti</span><span style="color:#a35a12" class="c-part2">in parte</span><span style="color:var(--err)">da preparare</span></div>
     </div>
     <div class="card sumcard" id="datecard" hidden>
       <h2>Ritiri per data</h2>
@@ -153,7 +157,7 @@ footer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:24px}
   </div>
   <p class="err" id="err" hidden></p>
   <footer>Castagnacopo · le castagne di Caprese Michelangelo</footer>
-</div>
+</main>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -170,7 +174,7 @@ const cls = (r,q) => !q ? 'c-none' : r>=q ? 'c-ok' : r>0 ? 'c-part' : 'c-todo';
 function prepTable(q, r){   // q, r: {1:n,3:n,5:n,10:n}
   const sizes = SZ.filter(s=>q[s]>0);
   const tq = sizes.reduce((t,s)=>t+q[s],0), tr = sizes.reduce((t,s)=>t+Math.min(r[s],q[s]),0);
-  return `<table class="pt"><tr><th></th>${sizes.map(s=>`<th>${s} kg</th>`).join('')}<th>Totale</th></tr>
+  return `<table class="pt"><tr><th><span class="sr">Sacchetti</span></th>${sizes.map(s=>`<th>${s} kg</th>`).join('')}<th>Totale</th></tr>
     <tr><td>Richiesti</td>${sizes.map(s=>`<td>${q[s]}</td>`).join('')}<td>${tq}</td></tr>
     <tr><td>Preparati</td>${sizes.map(s=>`<td class="${cls(r[s],q[s])}">${r[s]}</td>`).join('')}<td class="${cls(tr,tq)}">${tr}</td></tr></table>`;
 }
