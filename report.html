@@ -6,9 +6,11 @@
 <meta name="robots" content="noindex">
 <title>Castagnacopo – Report ordini</title>
 <link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#f7f1e8;--card:#fffdf9;--ink:#2b1d14;--muted:#7a6656;--line:#e6d9c8;--brand:#7b3f1d;--accent:#c98a3c;--err:#a8322a;--ok:#3f7a3a;--wa:#1f8f4e;--sel:#f3e2c8}
+:root{--bg:#f7f1e8;--card:#fffdf9;--ink:#2b1d14;--muted:#7a6656;--line:#e6d9c8;--brand:#7b3f1d;--accent:#c98a3c;--err:#a8322a;--ok:#3f7a3a;--wa:#1a7a43;--sel:#f3e2c8}
 @media (prefers-color-scheme:dark){:root{--bg:#1b140f;--card:#251b14;--ink:#f3e9dd;--muted:#b9a593;--line:#3a2c21;--brand:#d98b52;--accent:#e0a85a;--err:#f08a80;--ok:#8fcf86;--wa:#4cc27f;--sel:#3a2a1c}}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -36,6 +38,8 @@ input,select{padding:9px 11px;border:1px solid var(--line);border-radius:10px;ba
 .kpi b{font-family:Fraunces,Georgia,serif;font-size:1.7rem;line-height:1.1}
 .kpi.main{background:var(--brand);color:#fff;border-color:transparent}
 .kpi.main small{color:#f3dcc7}
+/* tema scuro: su arancione, verde e rosso chiari il testo bianco non si legge, meglio scuro */
+@media (prefers-color-scheme:dark){:root .btn:not(.ghost),:root .kpi.main,:root .seg button.on{color:#1b140f}.kpi.main small{color:#3a2414}}
 .kpi .sub{font-size:.8rem;color:var(--muted)}
 .sizes{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 @media (max-width:560px){.sizes{grid-template-columns:repeat(2,1fr)}}
@@ -48,7 +52,7 @@ input,select{padding:9px 11px;border:1px solid var(--line);border-radius:10px;ba
 .set .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .set label{font-size:.85rem;font-weight:600}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:99px;font-size:.8rem;font-weight:600}
-.pill.open{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.pill.open{background:color-mix(in srgb,var(--ok) 15%,transparent);color:color-mix(in srgb,var(--ok) 75%,var(--ink))}
 .pill.closed{background:color-mix(in srgb,var(--err) 15%,transparent);color:var(--err)}
 .hint{color:var(--muted);font-size:.8rem;margin:0}
 .tw{overflow-x:auto}
@@ -120,9 +124,10 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
 .cu .cols{position:absolute;left:44px;right:0;top:0;bottom:0;display:flex}
 .cu .c{flex:1;position:relative;cursor:default}
 .cu .c:hover::after{content:'';position:absolute;left:50%;top:0;bottom:0;border-left:1px solid var(--muted)}
-.rk .v small{opacity:.8}
+.rk .v small{color:var(--muted)}
 .chtip{position:fixed;z-index:20;pointer-events:none;background:var(--ink);color:var(--bg);font-size:.8rem;line-height:1.35;padding:7px 10px;border-radius:8px;max-width:240px;opacity:0;transition:opacity .1s}
 .chtip.on{opacity:1}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .chempty{color:var(--muted);font-size:.85rem;padding:24px 0}
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
 .toast.on{opacity:1}
@@ -131,7 +136,7 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
 </style>
 </head>
 <body>
-<div class="wrap">
+<main class="wrap">
   <div class="card login" id="login">
     <img src="logo.svg" width="80" alt="">
     <h1>Report ordini</h1>
@@ -203,8 +208,8 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
     <div class="grid2">
       <div class="card">
         <h2>Conti</h2>
-        <div class="tw"><table class="conti">
-          <thead><tr><th class="nosort"></th><th class="n nosort">Tutti gli ordini</th><th class="n nosort">Solo pagati</th><th class="n nosort">Regalate</th></tr></thead>
+        <div class="tw" tabindex="0"><table class="conti">
+          <thead><tr><th class="nosort"><span class="sr">Voce</span></th><th class="n nosort">Tutti gli ordini</th><th class="n nosort">Solo pagati</th><th class="n nosort">Regalate</th></tr></thead>
           <tbody id="contiTb"></tbody>
         </table></div>
         <p class="hint" id="contiHint" style="margin-top:8px"></p>
@@ -279,7 +284,7 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
         </div>
       </div>
       <div class="confirm noprint" id="confirm"><span id="confirmTxt"></span><span style="display:flex;gap:8px"><button class="btn ghost" id="cNo">Annulla</button><button class="btn danger" id="cYes">Sì, cancella</button></span></div>
-      <div class="tw"><table>
+      <div class="tw" tabindex="0"><table>
         <thead><tr>
           <th class="nosort noprint"><input type="checkbox" id="all" aria-label="Seleziona tutti"></th>
           <th data-k="data">Data</th><th data-k="cognome">Cognome</th><th data-k="nome">Nome</th><th data-k="telefono">Telefono</th><th data-k="contatto">Contatto</th>
@@ -294,7 +299,7 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
     <div class="card mb">
       <div class="bar"><h2 style="margin:0">Referenti</h2><span class="hint">Il link personale compila da solo il contatto. Il riepilogo si apre in WhatsApp già scritto.</span></div>
       <div class="confirm noprint" id="rconfirm"><span id="rconfirmTxt"></span><span style="display:flex;gap:8px"><button class="btn ghost" id="rNo">Annulla</button><button class="btn danger" id="rYes">Sì, elimina</button></span></div>
-      <div class="tw"><table>
+      <div class="tw" tabindex="0"><table>
         <thead><tr><th class="nosort">Referente</th><th class="nosort">WhatsApp</th><th class="n nosort">Ordini</th><th class="n nosort">Kg</th><th class="n nosort">Euro</th><th class="n nosort">Incassato</th><th class="n nosort">Da incassare</th><th class="n nosort">Quota €/kg</th><th class="n nosort">Sua quota</th><th class="n nosort">Su pagati</th><th class="n nosort" title="Incassato meno la sua quota sugli ordini pagati">Ti deve</th><th class="nosort noprint">Azioni</th></tr></thead>
         <tbody id="refTb"></tbody><tfoot id="refTf"></tfoot>
       </table></div>
@@ -310,7 +315,7 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
 
     <div class="card mb">
       <div class="bar"><h2 style="margin:0">Preparatori</h2><span class="hint">Chi prepara i sacchetti: col suo link segna gli ordini pronti e i referenti lo vedono subito.</span></div>
-      <div class="tw"><table>
+      <div class="tw" tabindex="0"><table>
         <thead><tr><th class="nosort">Nome</th><th class="n nosort">Ordini preparati</th><th class="nosort noprint">Azioni</th></tr></thead>
         <tbody id="prepTb"></tbody>
       </table></div>
@@ -367,7 +372,7 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
     </div>
     <p class="muted" style="font-size:.8rem" id="upd"></p>
   </div>
-</div>
+</main>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -708,7 +713,7 @@ $('pf').onsubmit = async e => {
 
 /* ----- grafici ----- */
 let chM = 'kg';
-const chTip = Object.assign(document.createElement('div'), {className:'chtip', role:'tooltip'}); document.body.appendChild(chTip);
+const chTip = Object.assign(document.createElement('div'), {className:'chtip'}); document.body.appendChild(chTip);
 function tipShow(e, html){ chTip.innerHTML = html; chTip.classList.add('on');
   const r = chTip.getBoundingClientRect(); let x = e.clientX + 14, y = e.clientY + 14;
   if (x + r.width > innerWidth - 8) x = e.clientX - r.width - 14; if (y + r.height > innerHeight - 8) y = e.clientY - r.height - 14;
