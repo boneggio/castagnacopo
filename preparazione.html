@@ -8,6 +8,8 @@
 <title>Castagnacopo – Preparazione sacchetti</title>
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#f7f1e8;--card:#fffdf9;--ink:#2b1d14;--muted:#7a6656;--line:#e6d9c8;--brand:#7b3f1d;--accent:#c98a3c;--ok:#3f7a3a;--err:#a8322a}
@@ -33,14 +35,15 @@ h1{font-family:Fraunces,Georgia,serif;font-weight:800;color:var(--brand);margin:
 .seg{display:flex;flex:1 1 100%;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .seg button{flex:1 1 auto;border:0;background:transparent;color:var(--ink);padding:8px 6px;font:500 .86rem Inter,sans-serif;cursor:pointer;white-space:nowrap}
 .seg button.on{background:var(--brand);color:#fff}
+@media (prefers-color-scheme:dark){:root .seg button.on,:root .btn:not(.ghost){color:#1b140f}}
 select,input{padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;min-width:0}
 #q{flex:1 1 140px}
 .list{display:grid;gap:10px}
 .o{display:grid;gap:10px}
 .o.full{border-color:color-mix(in srgb,var(--ok) 45%,var(--line))}
-.o.gone{opacity:.55}
+.o.gone{opacity:.8}
 .top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
-.o h3{margin:0;font-size:1.05rem}
+.o h2{margin:0;font-size:1.05rem}
 .o .det{color:var(--muted);font-size:.85rem}
 .st{font-size:.78rem;font-weight:600;padding:3px 9px;border-radius:99px;white-space:nowrap;background:var(--bg);color:var(--muted)}
 .st.part{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--ink)}
@@ -98,7 +101,7 @@ footer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:24px}
 </style>
 </head>
 <body>
-<div class="wrap">
+<main class="wrap">
   <header><img src="logo.svg" alt=""><div><h1 id="title">Preparazione sacchetti</h1></div></header>
   <p class="sub" id="sub">Caricamento…</p>
 
@@ -119,7 +122,7 @@ footer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:24px}
   </div>
   <p class="err" id="err" hidden></p>
   <footer>Castagnacopo · le castagne di Caprese Michelangelo</footer>
-</div>
+</main>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -183,7 +186,7 @@ function render(){
     .sort((a,b)=> String(a.data).localeCompare(String(b.data)));
   $('list').innerHTML = list.map(o => `
     <div class="card o ${isFull(o)?'full':''} ${o.consegnato?'gone':''}" data-o="${esc(o.id)}">
-      <div class="top"><div><h3>${esc(o.nome)} ${esc(o.cognome)}</h3><div class="det">tramite ${esc(o.contatto||'—')} · ${o.kg} kg${o.regalato?' · <span class="tg">regalato</span>':''}</div></div>${status(o)}</div>
+      <div class="top"><div><h2>${esc(o.nome)} ${esc(o.cognome)}</h2><div class="det">tramite ${esc(o.contatto||'—')} · ${o.kg} kg${o.regalato?' · <span class="tg">regalato</span>':''}</div></div>${status(o)}</div>
       <div class="rows">${SZ.filter(s=>o['q'+s]).map(s=>{ const q=+o['q'+s], r=+o['r'+s]||0;
         return `<div class="line ${r===q?'done':''}"><span class="lbl">${s} kg<small>${q} sacchett${q===1?'o':'i'}</small></span>
           <span class="step"><button data-d="-1" data-s="${s}" ${r<=0||o.consegnato?'disabled':''} aria-label="Uno in meno da ${s} kg">−</button>
