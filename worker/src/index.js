@@ -64,6 +64,8 @@ function settingsFrom(p) {
   const today = nowParts().date;
   s.expired = !!s.deadline && today > s.deadline;
   s.active = s.open && !s.expired;
+  // sito riservato: la pagina degli ordini si apre solo con il link segreto (?c=codice)
+  s.riservato = p.riservato === '1'; s.accesso = p.accesso_c || '';
   return s;
 }
 const settings = async env => settingsFrom(await getProps(env));
@@ -188,8 +190,10 @@ const eurTxt = n => n.toFixed(2).replace('.', ',') + ' €';
 
 /* ---------- GET ---------- */
 
-async function info(env) {
+const accessOk = (s, c) => !s.riservato || (!!s.accesso && String(c || '') === s.accesso);
+async function info(env, c) {
   const s = await settings(env);
+  if (!accessOk(s, c)) return { ok: true, riservato: true };
   const out = { ok: true, open: s.active, msg: s.msg || DEFAULT_MSG, deadline: s.deadline, prices: s.prices, ritiro: s.ritiro,
     referenti: (await referenti(env, s.quota)).map(r => ({ code: r.code, nome: r.nome })) };
   if (s.limit > 0) out.left = Math.max(0, s.limit - await kgOrdered(env, thisYear()));
@@ -248,6 +252,7 @@ async function order(env, ctx, d) {
     if (prev) return JSON.parse(prev.res);
   }
   const s = await settings(env);
+  if (!accessOk(s, d.c)) return { ok: false, riservato: true, error: 'Questa pagina è riservata: serve il link giusto.' };
   if (!s.active) return { ok: false, closed: true, error: s.msg || DEFAULT_MSG };
 
   const nome = clean(d.nome, 60), cognome = clean(d.cognome, 60);
@@ -387,6 +392,11 @@ async function saveSettings(env, d) {
     if (v.length !== SIZES.length || v.some(x => x !== '' && !(x > 0))) return { ok: false, error: 'Prezzi di vendita non validi' };
     await set('sale', JSON.stringify(v));
   }
+  if ('riservato' in d) {
+    await set('riservato', d.riservato ? '1' : '0');
+    if (d.riservato && !p.accesso_c) await set('accesso_c', randHex(6));
+  }
+  if (d.nuovoAccesso) await set('accesso_c', randHex(6));   // il vecchio link smette di funzionare per tutti
   if ('deadline' in d) await set('deadline', /^\d{4}-\d{2}-\d{2}$/.test(String(d.deadline)) ? String(d.deadline) : '');
   return { ok: true, settings: await settings(env) };
 }
@@ -584,7 +594,7 @@ async function logout(env, d, all) {
 
 async function handleGet(env, url, ip) {
   const p = Object.fromEntries(url.searchParams); p._ip = ip;
-  if (p.action === 'info') return info(env);
+  if (p.action === 'info') return info(env, p.c);
   if (p.action === 'mine') return mine(env, p.t, p.anno);
   if (p.action === 'prep') return prep(env, p.t, p.anno);
   if (p.action !== 'report') return { ok: true, service: 'castagnacopo' };
