@@ -201,6 +201,11 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--brand);cursor:poi
             <button class="btn sm ghost" id="ritiroSave">Salva</button>
           </div>
           <p class="hint">Compare sul sito sotto "Ritiro" e nel messaggio di conferma dopo l'ordine. Lascia vuoto per non mostrarlo.</p>
+          <div class="row" style="margin-top:6px"><span class="pill" id="accPill"></span><button class="btn sm" id="accToggle"></button></div>
+          <div id="accBox" hidden>
+            <div class="row"><input id="accLink" readonly style="flex:1 1 220px" aria-label="Link segreto del sito"><button class="btn sm" id="accCopy">📋 Copia link</button><button class="btn sm danger ghost" id="accNew">🔄 Cambia link</button></div>
+          </div>
+          <p class="hint" id="accHint"></p>
         </div>
       </div>
     </div>
@@ -494,6 +499,15 @@ function render(){
     ? (st.expired ? 'La data è passata: la pagina mostra il messaggio di chiusura. Per riaprire metti una nuova data.' : 'Il giorno dopo questa data le prenotazioni si chiudono da sole.')
     : 'Nessuna scadenza: le prenotazioni restano aperte finché non le chiudi.';
   $('stToggle').textContent = st.open ? 'Chiudi le prenotazioni' : 'Riapri le prenotazioni';
+  // sito riservato
+  $('accPill').className = 'pill ' + (st.riservato ? 'closed' : 'open');
+  $('accPill').textContent = st.riservato ? '🔒 Sito riservato: si apre solo con il link' : 'Sito aperto a tutti';
+  $('accToggle').textContent = st.riservato ? 'Apri a tutti' : 'Rendi riservato';
+  $('accToggle').className = 'btn sm ' + (st.riservato ? 'ghost' : '');
+  $('accBox').hidden = !st.riservato; $('accLink').value = st.riservato ? accUrl() : '';
+  $('accHint').textContent = st.riservato
+    ? 'Manda questo link a chi vuoi: il telefono se lo ricorda per un anno. Chi arriva senza link vede solo "Pagina riservata". I link dei referenti (Link ordini) contengono già il codice. Con "Cambia link" quello vecchio smette di funzionare per tutti.'
+    : 'Chiunque conosca l\'indirizzo può aprire la pagina degli ordini. Con "Rendi riservato" si apre solo con un link segreto che mandi tu.';
   $('stToggle').className = 'btn sm ' + (st.open ? 'danger ghost' : '');
   if (document.activeElement !== $('limit')) $('limit').value = st.limit || '';
   if (document.activeElement !== $('cmsg')) $('cmsg').value = st.msg || '';
@@ -615,6 +629,16 @@ async function saveSettings(body, msg){
   catch(x){ toast('Non salvato: '+x.message); }
 }
 $('stToggle').onclick = () => saveSettings({open: !D.settings.open}, D.settings.open ? 'Prenotazioni chiuse' : 'Prenotazioni riaperte');
+const accUrl = () => `${SITE}/?c=${D.settings.accesso}`;
+$('accToggle').onclick = () => saveSettings({riservato: !D.settings.riservato}, D.settings.riservato ? 'Sito aperto a tutti' : 'Sito riservato: ora si apre solo con il link');
+$('accCopy').onclick = () => copy(accUrl(), 'Link copiato');
+// cambiare il link va confermato: si chiede un secondo tocco entro 4 secondi
+$('accNew').onclick = () => {
+  const b = $('accNew');
+  if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Sicuro? Tocca ancora'; setTimeout(()=>{ delete b.dataset.sure; b.textContent = '🔄 Cambia link'; }, 4000); return; }
+  delete b.dataset.sure; b.textContent = '🔄 Cambia link';
+  saveSettings({nuovoAccesso: true}, 'Link cambiato: quello vecchio non funziona più');
+};
 $('dlSave').onclick = () => { if(!$('deadline').value) return toast('Scegli una data'); saveSettings({deadline: $('deadline').value}, 'Data salvata'); };
 $('dlClear').onclick = () => saveSettings({deadline: ''}, 'Data tolta');
 $('addKgGo').onclick = () => { const n = parseInt($('addKg').value,10); if(!(n>0)) return toast('Scrivi quanti kg aggiungere'); $('addKg').value=''; saveSettings({addKg: n}, `Aggiunti ${n} kg: ora sono ${(D.settings.limit||0)+n} kg in totale`); };
@@ -663,7 +687,7 @@ $('refTb').onclick = e => {
   if (a==='csv') csvOf(g.orders, `castagnacopo-${anno}-${(g.ref?g.ref.code:g.nome).replace(/[^\w-]+/g,'_')}.csv`);
   if (a==='stats'){ const v=!g.ref.stats; post({action:'refStats', code:g.ref.code, value:v}).then(j=>{ D.referenti=j.referenti; render(); toast(v ? `${g.ref.nome} ora vede classifica e disponibilità` : `${g.ref.nome} non vede più la classifica`); }).catch(x=>toast('Non salvato: '+x.message)); }
   if (a==='rlink') copy(`${SITE}/riscossioni.html?k=${g.ref.tk}`, 'Link "I miei ordini" copiato');
-  if (a==='link') copy(`${SITE}/?r=${g.ref.code}`, 'Link copiato: ' + `${SITE}/?r=${g.ref.code}`);
+  if (a==='link') { const u = `${SITE}/?r=${g.ref.code}${D.settings.riservato ? '&c='+D.settings.accesso : ''}`; copy(u, 'Link copiato: ' + u); }
   if (a==='edit'){ adoptName=''; editCode=g.ref.code; $('rfNome').value=g.ref.nome; $('rfWa').value=g.ref.wa; $('rfQuota').value=fmtN(g.ref.quota); $('rfGo').textContent='Salva modifiche'; $('rfCancel').hidden=false; $('rfNome').focus(); }
   if (a==='adopt'){ editCode=''; adoptName=g.nome; $('rfNome').value=g.nome; $('rfWa').value=''; $('rfGo').textContent='Aggiungi referente'; $('rfCancel').hidden=false; $('rfWa').focus(); toast('Inserisci il numero WhatsApp e salva'); }
   if (a==='del'){ rPending = g.ref.code; $('rconfirmTxt').textContent = `Eliminare il referente ${g.ref.nome}? Gli ordini restano, ma il suo link personale smette di funzionare.`; $('rconfirm').classList.add('on'); }
